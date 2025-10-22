@@ -1,0 +1,48 @@
+## IDF Component Manager Manifest File
+## This file describes the LopCore component and its dependencies
+
+version: "1.0.0"
+description: "Modern C++17 middleware framework for ESP32 IoT applications with AWS IoT support"
+url: "https://github.com/stevanStevic/lopcore"
+repository: "https://github.com/stevanStevic/lopcore.git"
+documentation: "https://github.com/stevanStevic/lopcore/blob/main/README.md"
+license: MIT
+
+dependencies:
+    # Core ESP-IDF requirement
+    idf:
+        version: ">=5.2.0,<6.0.0"
+
+    # AWS IoT SDK (optional but recommended for CoreMQTT client)
+    # When present, enables CoreMQTT client implementation
+    # Provides: coreMQTT, corePKCS11, Device Shadow, Jobs, Fleet Provisioning, etc.
+    # Note: In current setup, esp-aws-iot is already in parent project's components/
+    #       In standalone mode, this would pull it as a dependency
+
+targets:
+    - esp32
+    - esp32s2
+    - esp32s3
+    - esp32c3
+    - esp32c6
+    - esp32h2
+
+# Examples will be added when creating standalone repository
+# examples:
+#   - path: examples/01_basic_logging
+#   - path: examples/02_storage_demo
+#   - path: examples/03_mqtt_esp_native
+#   - path: examples/04_mqtt_aws_iot
+#   - path: examples/05_full_stack
+
+files:
+    exclude:
+        - "*.pyc"
+        - "__pycache__"
+        - "build/"
+        - "dist/"
+        - ".vscode/"
+        - ".devcontainer/"
+        - "test/build/" # Exclude test build artifacts but keep test sources
+        - ".git"
+        - ".github"

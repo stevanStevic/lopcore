@@ -1,0 +1,226 @@
+name: CI/CD
+
+on:
+    push:
+        branches: [main, develop]
+    pull_request:
+        branches: [main, develop]
+    release:
+        types: [published]
+
+env:
+    IDF_VERSION: v5.2.4
+    IDF_TARGET: esp32s3
+
+jobs:
+    # Unit tests run on Ubuntu with mocked ESP-IDF
+    unit-tests:
+        name: Unit Tests
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  submodules: recursive
+
+            - name: Setup C++ environment
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y cmake g++ ninja-build
+
+            - name: Run unit tests
+              working-directory: test/unit
+              run: |
+                  mkdir -p build
+                  cd build
+                  cmake -G Ninja ..
+                  ninja
+                  ctest --output-on-failure --verbose
+
+            - name: Generate coverage report
+              if: success()
+              working-directory: test/unit/build
+              run: |
+                  ninja coverage || echo "Coverage target not available"
+
+    # Build verification with real ESP-IDF
+    build-verification:
+        name: Build with ESP-IDF ${{ matrix.idf_version }}
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                idf_version: ["v5.2.4", "latest"]
+                idf_target: ["esp32", "esp32s3", "esp32c3"]
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Setup ESP-IDF
+              uses: espressif/esp-idf-ci-action@v1
+              with:
+                  esp_idf_version: ${{ matrix.idf_version }}
+                  target: ${{ matrix.idf_target }}
+
+            - name: Create test project
+              run: |
+                  mkdir -p test-project/components
+                  cp -r . test-project/components/lopcore
+
+                  # Create minimal main component
+                  cat > test-project/main/CMakeLists.txt << 'EOF'
+                  idf_component_register(SRCS "main.cpp"
+                                        INCLUDE_DIRS "."
+                                        REQUIRES lopcore)
+                  EOF
+
+                  cat > test-project/main/main.cpp << 'EOF'
+                  #include "lopcore/logging/logger.hpp"
+                  #include "lopcore/storage/storage_factory.hpp"
+                  extern "C" void app_main(void) {
+                      auto &logger = lopcore::Logger::getInstance();
+                      auto storage = lopcore::StorageFactory::createNvs("test");
+                  }
+                  EOF
+
+                  # Create project CMakeLists.txt
+                  cat > test-project/CMakeLists.txt << 'EOF'
+                  cmake_minimum_required(VERSION 3.16)
+                  include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+                  project(lopcore-test)
+                  EOF
+
+            - name: Build test project
+              working-directory: test-project
+              run: |
+                  . $IDF_PATH/export.sh
+                  idf.py set-target ${{ matrix.idf_target }}
+                  idf.py build
+
+            - name: Check binary size
+              working-directory: test-project
+              run: |
+                  . $IDF_PATH/export.sh
+                  idf.py size
+
+                  # Extract lopcore size (this is approximate)
+                  echo "=== LopCore Component Size ==="
+                  find build -name "*.a" | grep lopcore | xargs ls -lh
+
+    # Code quality checks
+    code-quality:
+        name: Code Quality
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Install clang-format
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y clang-format-14
+
+            - name: Check code formatting
+              run: |
+                  find src include -name "*.cpp" -o -name "*.hpp" -o -name "*.c" -o -name "*.h" | \
+                  xargs clang-format-14 --dry-run --Werror
+
+            - name: Check for TODOs
+              run: |
+                  # Allow TODO comments but warn about them
+                  echo "=== Checking for TODO/FIXME comments ==="
+                  grep -rn "TODO\|FIXME" src/ include/ || echo "No TODOs found"
+
+            - name: Validate component manifest
+              run: |
+                  # Check that idf_component.yml exists and is valid YAML
+                  python3 -c "import yaml; yaml.safe_load(open('idf_component.yml'))"
+
+    # Documentation verification
+    docs-check:
+        name: Documentation Check
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Check documentation files
+              run: |
+                  # Verify all required docs exist
+                  for file in README.md LICENSE CHANGELOG.md CONTRIBUTING.md; do
+                    if [ ! -f "$file" ]; then
+                      echo "Missing: $file"
+                      exit 1
+                    fi
+                  done
+                  echo "✓ All documentation files present"
+
+            - name: Check examples
+              run: |
+                  # Verify examples are buildable
+                  for example in examples/*/; do
+                    if [ ! -f "${example}CMakeLists.txt" ]; then
+                      echo "Missing CMakeLists.txt in: $example"
+                      exit 1
+                    fi
+                    if [ ! -f "${example}README.md" ]; then
+                      echo "Missing README.md in: $example"
+                      exit 1
+                    fi
+                  done
+                  echo "✓ All examples have required files"
+
+    # Publish component (on release)
+    publish:
+        name: Publish Component
+        needs: [unit-tests, build-verification, code-quality, docs-check]
+        if: github.event_name == 'release'
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Verify version
+              run: |
+                  VERSION=$(cat VERSION)
+                  TAG=${GITHUB_REF#refs/tags/v}
+                  if [ "$VERSION" != "$TAG" ]; then
+                    echo "Version mismatch: VERSION=$VERSION, TAG=$TAG"
+                    exit 1
+                  fi
+                  echo "✓ Version matches tag: $VERSION"
+
+            - name: Create release archive
+              run: |
+                  VERSION=$(cat VERSION)
+                  tar -czf lopcore-${VERSION}.tar.gz \
+                    --exclude='.git*' \
+                    --exclude='test/' \
+                    --exclude='examples/' \
+                    --exclude='.github/' \
+                    CMakeLists.txt Kconfig idf_component.yml VERSION LICENSE \
+                    README.md CHANGELOG.md CONTRIBUTING.md \
+                    include/ src/
+
+            - name: Upload release asset
+              uses: actions/upload-release-asset@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  upload_url: ${{ github.event.release.upload_url }}
+                  asset_path: ./lopcore-${{ github.event.release.tag_name }}.tar.gz
+                  asset_name: lopcore-${{ github.event.release.tag_name }}.tar.gz
+                  asset_content_type: application/gzip
+
+            - name: Publish to ESP Component Registry
+              if: success()
+              run: |
+                  # This requires ESP_COMPONENT_REGISTRY_TOKEN secret
+                  # Uncomment when ready to publish
+                  # pip install idf-component-manager
+                  # compote component upload --namespace lopcore --name lopcore
+                  echo "Component ready for ESP Registry publication"

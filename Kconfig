@@ -1,0 +1,186 @@
+menu "LopCore Configuration"
+
+    menu "Logging System"
+
+        config LOPCORE_ENABLE_LOGGING
+            bool "Enable LopCore Logging System"
+            default y
+            help
+                Enable the logging system with console and file sink support.
+
+        config LOPCORE_LOG_DEFAULT_LEVEL
+            int "Default log level"
+            depends on LOPCORE_ENABLE_LOGGING
+            range 0 4
+            default 3
+            help
+                Default log level for LopCore components:
+                0 = ERROR
+                1 = WARN
+                2 = INFO
+                3 = DEBUG
+                4 = VERBOSE
+
+        config LOPCORE_LOG_CONSOLE_COLORS
+            bool "Enable colored console output"
+            depends on LOPCORE_ENABLE_LOGGING
+            default y
+            help
+                Enable ANSI color codes in console log output.
+
+        config LOPCORE_LOG_FILE_ENABLED
+            bool "Enable file logging sink"
+            depends on LOPCORE_ENABLE_LOGGING
+            default n
+            help
+                Enable logging to files on SPIFFS/SD card.
+                Requires storage subsystem to be enabled.
+
+    endmenu
+
+    menu "Storage System"
+
+        config LOPCORE_ENABLE_STORAGE
+            bool "Enable Storage Abstraction Layer"
+            default y
+            help
+                Enable unified storage interface for SPIFFS, NVS, and SD card.
+
+        config LOPCORE_STORAGE_SPIFFS_ENABLED
+            bool "Enable SPIFFS storage backend"
+            depends on LOPCORE_ENABLE_STORAGE
+            default y
+            help
+                Enable SPIFFS file system support.
+
+        config LOPCORE_STORAGE_NVS_ENABLED
+            bool "Enable NVS storage backend"
+            depends on LOPCORE_ENABLE_STORAGE
+            default y
+            help
+                Enable Non-Volatile Storage (NVS) support.
+
+        config LOPCORE_STORAGE_SD_ENABLED
+            bool "Enable SD card storage backend"
+            depends on LOPCORE_ENABLE_STORAGE
+            default n
+            help
+                Enable SD card storage support (future feature).
+
+    endmenu
+
+    menu "MQTT Client"
+
+        config LOPCORE_ENABLE_MQTT
+            bool "Enable MQTT Client Support"
+            default y
+            help
+                Enable MQTT client factory with multiple implementations.
+
+        choice LOPCORE_MQTT_DEFAULT_CLIENT
+            prompt "Default MQTT client implementation"
+            depends on LOPCORE_ENABLE_MQTT
+            default LOPCORE_MQTT_AUTO
+            help
+                Choose which MQTT client implementation to use by default.
+
+            config LOPCORE_MQTT_AUTO
+                bool "Auto-select (AWS IoT → CoreMQTT, others → ESP-MQTT)"
+                help
+                    Automatically select CoreMQTT for AWS IoT endpoints,
+                    ESP-MQTT for other brokers.
+
+            config LOPCORE_MQTT_ESP_PREFERRED
+                bool "Prefer ESP-MQTT (ESP-IDF native)"
+                help
+                    Use ESP-MQTT client by default.
+                    Lightweight, native ESP-IDF implementation.
+
+            config LOPCORE_MQTT_CORE_PREFERRED
+                bool "Prefer CoreMQTT (AWS IoT optimized)"
+                help
+                    Use CoreMQTT client by default.
+                    Requires esp-aws-iot component.
+                    Optimized for AWS IoT Core.
+        endchoice
+
+        config LOPCORE_MQTT_BUDGET_ENABLED
+            bool "Enable message budgeting (anti-flooding)"
+            depends on LOPCORE_ENABLE_MQTT
+            default y
+            help
+                Enable message rate limiting to prevent flooding.
+
+        config LOPCORE_MQTT_AUTO_RECONNECT
+            bool "Enable automatic reconnection"
+            depends on LOPCORE_ENABLE_MQTT
+            default y
+            help
+                Automatically reconnect on connection loss.
+
+    endmenu
+
+    menu "TLS Transport"
+
+        config LOPCORE_ENABLE_TLS
+            bool "Enable TLS Transport Layer"
+            default y
+            help
+                Enable TLS transport with mbedTLS support.
+
+        config LOPCORE_TLS_VERIFY_PEER
+            bool "Verify server certificate by default"
+            depends on LOPCORE_ENABLE_TLS
+            default y
+            help
+                Enable server certificate verification by default.
+                Can be disabled per-connection if needed.
+
+        config LOPCORE_ENABLE_PKCS11
+            bool "Enable PKCS#11 Support"
+            depends on LOPCORE_ENABLE_TLS
+            default y
+            help
+                Enable PKCS#11 for secure credential storage.
+                Requires esp-aws-iot for corePKCS11 library.
+                Supports hardware secure elements (ATECC608A, etc).
+
+        config LOPCORE_TLS_MAX_FRAGMENT_LENGTH
+            int "TLS maximum fragment length"
+            depends on LOPCORE_ENABLE_TLS
+            range 512 16384
+            default 4096
+            help
+                Maximum TLS fragment size in bytes.
+
+    endmenu
+
+    menu "Provisioning (Future)"
+
+        config LOPCORE_ENABLE_PROVISIONING
+            bool "Enable Provisioning System"
+            default n
+            help
+                Enable device provisioning subsystem.
+                (Feature planned for future release)
+
+    endmenu
+
+    menu "Advanced"
+
+        config LOPCORE_ENABLE_DEBUG_LOGS
+            bool "Enable debug logging in LopCore internals"
+            default n
+            help
+                Enable verbose debug logging for LopCore development/debugging.
+
+        config LOPCORE_THREAD_STACK_SIZE
+            int "Default thread stack size"
+            range 2048 8192
+            default 4096
+            help
+                Default stack size for LopCore background tasks.
+
+    endmenu
+
+endmenu

@@ -51,11 +51,11 @@ LopCore sits between your application and ESP-IDF, providing:
 
 ```bash
 # Clone the repository with submodules
-git clone --recursive https://github.com/your-org/lopcore.git
+git clone --recursive https://github.com/stevanStevic/lopcore.git
 
 # Or add as submodule to your project
 cd /path/to/your/project/components/
-git submodule add https://github.com/your-org/lopcore.git
+git submodule add https://github.com/stevanStevic/lopcore.git
 git submodule update --init --recursive
 ```
 

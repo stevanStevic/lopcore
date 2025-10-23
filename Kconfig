@@ -183,4 +183,22 @@ menu "LopCore Configuration"
 
     endmenu
 
+    menu "AWS IoT Libraries (esp-aws-iot)"
+        comment "Configuration for AWS IoT embedded SDK libraries"
+        comment "Includes: coreMQTT, corePKCS11, Device Shadow, etc."
+
+        # Source all Kconfig files from esp-aws-iot libraries
+        # This makes their configuration options available in menuconfig
+        # Note: Only libraries that have Kconfig files are included
+        rsource "components/esp-aws-iot/libraries/coreMQTT/Kconfig"
+        rsource "components/esp-aws-iot/libraries/corePKCS11/Kconfig"
+        rsource "components/esp-aws-iot/libraries/coreHTTP/Kconfig"
+        rsource "components/esp-aws-iot/libraries/coreMQTT-Agent/Kconfig"
+        rsource "components/esp-aws-iot/libraries/Device-Shadow-for-AWS-IoT-embedded-sdk/Kconfig"
+        rsource "components/esp-aws-iot/libraries/Device-Defender-for-AWS-IoT-embedded-sdk/Kconfig"
+        rsource "components/esp-aws-iot/libraries/Fleet-Provisioning-for-AWS-IoT-embedded-sdk/Kconfig"
+        rsource "components/esp-aws-iot/libraries/aws-iot-core-mqtt-file-streams-embedded-c/Kconfig"
+
+    endmenu
+
 endmenu

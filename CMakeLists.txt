@@ -89,8 +89,8 @@ idf_component_register(
 # =============================================================================
 
 # Detect if esp-aws-iot component libraries are available
-# The parent project adds esp-aws-iot/libraries to EXTRA_COMPONENT_DIRS,
-# so individual libraries (coreMQTT, corePKCS11, etc.) are registered as components
+# The lopcore Kconfig file uses 'rsource' to include configuration options
+# from esp-aws-iot libraries, making them visible in menuconfig.
 idf_build_get_property(build_components BUILD_COMPONENTS)
 
 # Check for coreMQTT (indicates esp-aws-iot is available)

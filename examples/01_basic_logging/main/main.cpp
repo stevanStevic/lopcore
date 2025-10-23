@@ -16,6 +16,7 @@
 #include "lopcore/logging/console_sink.hpp"
 #include "lopcore/logging/logger.hpp"
 
+#include "esp_random.h"
 #include "esp_system.h"
 #include "nvs_flash.h"
 

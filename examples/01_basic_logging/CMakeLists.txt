@@ -1,7 +1,7 @@
-idf_component_register(
-    SRCS "main.cpp"
-    INCLUDE_DIRS "."
-    REQUIRES
-        lopcore
-        nvs_flash
-)
+cmake_minimum_required(VERSION 3.16)
+
+# Set the lopcore component path
+set(EXTRA_COMPONENT_DIRS "../..")
+
+include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+project(basic_logging_example)

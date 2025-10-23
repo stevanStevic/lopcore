@@ -115,13 +115,13 @@ extern "C" void app_main(void)
     // Write binary data (e.g., certificate)
     LOPCORE_LOGI(TAG, "\nWriting binary certificate...");
     std::vector<uint8_t> certData = {'C', 'E', 'R', 'T', 0x00, 0x01, 0x02, 0x03};
-    if (spiffsStorage->writeBinary("cert.der", certData))
+    if (spiffsStorage->write("cert.der", certData))
     {
         LOPCORE_LOGI(TAG, "Certificate written successfully");
     }
 
     // Read binary data back
-    auto readCert = spiffsStorage->readBinary("cert.der");
+    auto readCert = spiffsStorage->read("cert.der");
     if (readCert)
     {
         LOPCORE_LOGI(TAG, "Read certificate: %zu bytes", readCert->size());
@@ -129,7 +129,7 @@ extern "C" void app_main(void)
 
     // List all files
     LOPCORE_LOGI(TAG, "\nListing files in SPIFFS:");
-    auto files = spiffsStorage->list("/");
+    auto files = spiffsStorage->listKeys();
     for (const auto &file : files)
     {
         LOPCORE_LOGI(TAG, "  - %s", file.c_str());

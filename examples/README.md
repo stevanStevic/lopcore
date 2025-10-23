@@ -4,21 +4,17 @@ This directory contains example applications demonstrating LopCore middleware fe
 
 ## Available Examples
 
-### Basic Features
+| Example                                     | Description                                          | Components Used              |
+| ------------------------------------------- | ---------------------------------------------------- | ---------------------------- |
+| [01_basic_logging](01_basic_logging/)       | Console logging with different log levels            | Logger, ConsoleSink          |
+| [02_storage_basics](02_storage_basics/)     | NVS and SPIFFS storage operations                    | StorageFactory, NVS, SPIFFS  |
+| [03_state_machine](03_state_machine/)       | Type-safe hierarchical state machine                 | StateMachine, IState         |
 
-| Example                                 | Description                               | Components Used             |
-| --------------------------------------- | ----------------------------------------- | --------------------------- |
-| [01_basic_logging](01_basic_logging/)   | Console logging with different log levels | Logger, ConsoleSink         |
-| [02_storage_basics](02_storage_basics/) | NVS and SPIFFS storage operations         | StorageFactory, NVS, SPIFFS |
+### Coming Soon
 
-### Advanced Features
-
-More examples coming soon:
-
--   `03_mqtt_basics` - MQTT client connection and pub/sub
--   `04_mqtt_aws_iot` - AWS IoT Core integration
--   `05_tls_certificates` - TLS with PKCS#11 certificates
--   `06_combined_app` - Full application combining multiple components
+-   MQTT client examples (basic and AWS IoT Core)
+-   TLS with PKCS#11 certificates
+-   Full application combining multiple components
 
 ## How to Use Examples
 
@@ -33,7 +29,7 @@ idf.py build flash monitor
 
 ### Method 2: Copy to Your Project
 
-Copy the main.cpp content into your own project and add lopcore to requirements:
+Copy the `main/main.cpp` content into your own project and add lopcore to requirements:
 
 ```cmake
 idf_component_register(
@@ -53,22 +49,20 @@ All examples require:
 
 ## Example Structure
 
-Each example contains:
+Each example is a complete ESP-IDF project with:
 
--   `main.cpp` - Example application code
--   `CMakeLists.txt` - Build configuration
+-   `main/main.cpp` - Example application code
+-   `main/CMakeLists.txt` - Component registration
+-   `CMakeLists.txt` - Project configuration
 -   `README.md` - Detailed documentation and explanation
 
 ## Learning Path
 
-**Recommended order for beginners:**
+**Recommended order:**
 
 1. **01_basic_logging** - Start here to understand logging basics
 2. **02_storage_basics** - Learn persistent storage (NVS + SPIFFS)
-3. **03_mqtt_basics** - Connect to MQTT broker
-4. **04_mqtt_aws_iot** - AWS IoT Core integration
-5. **05_tls_certificates** - Secure connections with certificates
-6. **06_combined_app** - See everything working together
+3. **03_state_machine** - Build type-safe state machines for complex logic
 
 ## Common Patterns
 
@@ -78,6 +72,7 @@ Each example contains:
 #include "lopcore/logging/logger.hpp"
 #include "lopcore/storage/storage_factory.hpp"
 #include "lopcore/mqtt/mqtt_client_factory.hpp"
+#include "lopcore/state_machine/state_machine.hpp"
 ```
 
 ### Initialize Components
@@ -93,6 +88,10 @@ auto storage = lopcore::StorageFactory::createNvs("config");
 // MQTT
 auto mqtt = lopcore::mqtt::MqttClientFactory::create(
     lopcore::mqtt::MqttClientType::AUTO, config);
+
+// State Machine
+enum class MyState { INIT, RUNNING, STOPPED };
+lopcore::StateMachine<MyState> stateMachine;
 ```
 
 ## Troubleshooting

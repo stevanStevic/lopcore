@@ -18,6 +18,7 @@ LopCore sits between your application and ESP-IDF, providing:
 -   **Multi-Sink Logging** - Console, file, and custom outputs with rotation
 -   **Unified Storage** - Single API for NVS, SPIFFS, and SD card
 -   **Dual MQTT Clients** - ESP-MQTT and CoreMQTT with auto-selection
+-   **Type-Safe State Machine** - Hierarchical FSM with transition validation
 -   **Secure TLS** - mbedTLS with PKCS#11 hardware crypto support
 -   **Type Safety** - Modern C++17 with RAII, smart pointers, `std::optional`
 -   **Production Ready** - 97% test coverage, comprehensive error handling
@@ -36,12 +37,13 @@ LopCore sits between your application and ESP-IDF, providing:
 
 ## ✨ Features at a Glance
 
-| Component   | Features                               | Status    |
-| ----------- | -------------------------------------- | --------- |
-| **Logging** | Multi-sink, colors, rotation, 5 levels | 🟢 Stable |
-| **Storage** | NVS + SPIFFS unified API, RAII handles | 🟢 Stable |
-| **MQTT**    | Dual client, auto-reconnect, QoS 0-2   | 🟢 Stable |
-| **TLS**     | mbedTLS, PKCS#11, hardware crypto      | 🟢 Stable |
+| Component         | Features                               | Status    |
+| ----------------- | -------------------------------------- | --------- |
+| **Logging**       | Multi-sink, colors, rotation, 5 levels | 🟢 Stable |
+| **Storage**       | NVS + SPIFFS unified API, RAII handles | 🟢 Stable |
+| **MQTT**          | Dual client, auto-reconnect, QoS 0-2   | 🟢 Stable |
+| **TLS**           | mbedTLS, PKCS#11, hardware crypto      | 🟢 Stable |
+| **State Machine** | Type-safe, hierarchical, observable    | 🟢 Stable |
 
 ---
 
@@ -253,6 +255,74 @@ auto mqtt = MqttClientFactory::create(type, mqttConfig, transport);
 -   Reusable transport (share across protocols)
 -   Configurable timeouts and retry
 
+### 🔷 State Machine
+
+Type-safe hierarchical state machine with validation.
+
+**Quick Example:**
+
+```cpp
+#include "lopcore/state_machine/state_machine.hpp"
+
+enum class AppState { INIT, RUNNING, ERROR };
+
+class RunningState : public lopcore::IState<AppState> {
+public:
+    explicit RunningState(lopcore::StateMachine<AppState>* sm)
+        : stateMachine_(sm) {}
+
+    void onEnter() override {
+        LOPCORE_LOGI("APP", "Entering RUNNING state");
+    }
+
+    void update() override {
+        // Do work...
+
+        // Conditionally transition based on state
+        if (errorDetected) {
+            stateMachine_->transition(AppState::ERROR);
+        }
+    }
+
+    void onExit() override {
+        LOPCORE_LOGI("APP", "Exiting RUNNING state");
+    }
+
+    AppState getStateId() const override { return AppState::RUNNING; }
+
+private:
+    lopcore::StateMachine<AppState>* stateMachine_;
+};
+
+// Setup state machine
+lopcore::StateMachine<AppState> sm(AppState::INIT);
+sm.registerState(AppState::RUNNING, std::make_unique<RunningState>(&sm));
+
+// Add transition rules
+sm.addTransitionRule(AppState::INIT, AppState::RUNNING);
+sm.addTransitionRule(AppState::RUNNING, AppState::ERROR);
+
+// Add observer
+sm.addObserver([](AppState from, AppState to) {
+    LOPCORE_LOGI("SM", "Transition: %d -> %d", from, to);
+});
+
+// Main loop
+while (true) {
+    sm.update();  // States can self-transition based on conditions
+}
+```
+
+**Features:**
+
+-   Type-safe enum-based states (compile-time checks)
+-   Entry/exit/update hooks for each state
+-   Self-transitions from within update() based on conditions
+-   Transition validation rules
+-   Observer pattern for state change notifications
+-   State history tracking
+-   Clean separation of state logic
+
 ---
 
 ## 📦 Requirements
@@ -314,7 +384,8 @@ lopcore/
 │   ├── logging/            # Logger, sinks (4 headers)
 │   ├── storage/            # Storage interfaces (5 headers)
 │   ├── mqtt/               # MQTT clients (8 headers)
-│   └── tls/                # TLS transport (6 headers)
+│   ├── tls/                # TLS transport (6 headers)
+│   └── state_machine/      # State machine (2 headers)
 │
 ├── src/                     # Implementation (private)
 │   ├── logging/            # 3 .cpp files
@@ -328,6 +399,9 @@ lopcore/
 │
 └── examples/                # Example applications
     ├── 01_basic_logging/   # Console logging
+    ├── 02_storage_basics/  # NVS + SPIFFS
+    ├── 03_state_machine/   # Type-safe FSM
+    └── README.md           # Examples guide
     ├── 02_storage_basics/  # NVS + SPIFFS
     └── README.md           # Examples guide
 ```

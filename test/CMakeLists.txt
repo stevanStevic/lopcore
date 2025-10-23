@@ -49,7 +49,6 @@ target_link_libraries(test_dummy
     GTest::gtest_main
 )
 
-# Week 2: Logging tests ✅ ACTIVE
 add_executable(test_logger
     unit/test_logger.cpp
     ${LOPCORE_BASE_DIR}/src/logging/logger.cpp
@@ -57,7 +56,6 @@ add_executable(test_logger
 )
 target_link_libraries(test_logger GTest::gtest_main)
 
-# Week 2: FileSink tests ✅ ACTIVE
 add_executable(test_file_sink
     unit/test_file_sink.cpp
     ${LOPCORE_BASE_DIR}/src/logging/logger.cpp
@@ -72,7 +70,6 @@ gtest_discover_tests(test_dummy)
 gtest_discover_tests(test_logger)
 gtest_discover_tests(test_file_sink)
 
-# Week 3: Storage tests ✅ ACTIVE
 add_executable(test_spiffs_storage
     unit/test_spiffs_storage.cpp
     ${LOPCORE_BASE_DIR}/src/storage/spiffs_storage.cpp
@@ -96,7 +93,12 @@ add_executable(test_storage_factory
 target_link_libraries(test_storage_factory GTest::gtest_main pthread)
 gtest_discover_tests(test_storage_factory)
 
-# Week 4: MQTT tests ✅ ACTIVE
+add_executable(test_state_machine
+    unit/state_machine/test_state_machine.cpp
+)
+target_link_libraries(test_state_machine GTest::gtest_main pthread)
+gtest_discover_tests(test_state_machine)
+
 add_executable(test_mqtt_types
     unit/mqtt/test_mqtt_types.cpp
 )
@@ -121,7 +123,6 @@ add_executable(test_esp_mqtt_client
 target_link_libraries(test_esp_mqtt_client GTest::gtest_main)
 gtest_discover_tests(test_esp_mqtt_client)
 
-# Week 4 - Phase 4: CoreMQTT client tests (simplified with mocks) ✅ NEW
 add_executable(test_coremqtt_client_simple
     unit/mqtt/test_coremqtt_client_simple.cpp
     ${LOPCORE_BASE_DIR}/src/mqtt/coremqtt_client.cpp
@@ -132,14 +133,14 @@ add_executable(test_coremqtt_client_simple
 target_link_libraries(test_coremqtt_client_simple GTest::gtest_main pthread)
 gtest_discover_tests(test_coremqtt_client_simple)
 
-# Week 4 - Phase 4: CoreMQTT client tests (full - disabled until ESP-IDF integration)
+# Phase 4: CoreMQTT client tests (full - disabled until ESP-IDF integration)
 #add_executable(test_coremqtt_client
 #    unit/mqtt/test_coremqtt_client.cpp
 #)
 #target_link_libraries(test_coremqtt_client GTest::gtest_main)
 #gtest_discover_tests(test_coremqtt_client)
 
-# Week 4 - Phase 4: MQTT Client Factory tests ✅ NEW
+# Phase 4: MQTT Client Factory tests ✅ NEW
 # NOTE: This test requires ESP-IDF environment to run (ESP-MQTT, mbedtls dependencies)
 # Run in ESP-IDF environment or add full ESP-IDF mocks
 add_executable(test_mqtt_client_factory

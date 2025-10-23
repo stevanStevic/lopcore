@@ -51,6 +51,12 @@
 #include "lopcore/tls/pkcs11_provider.hpp"
 #include "lopcore/tls/pkcs11_session.hpp"
 #include "lopcore/tls/tls_config.hpp"
+
+// ============================================================================
+// State Machine Subsystem
+// ============================================================================
+#include "lopcore/state_machine/istate.hpp"
+#include "lopcore/state_machine/state_machine.hpp"
 #include "lopcore/tls/tls_transport.hpp"
 
 // Future subsystems:

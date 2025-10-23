@@ -36,14 +36,14 @@ set(LOPCORE_SRCS
     "src/mqtt/coremqtt_client.cpp"
     "src/mqtt/mqtt_client_factory.cpp"
 
+    # State Machine subsystem (header-only template)
+    # No .cpp files needed - template implementation in headers
+
     # Provisioning (Future)
     # "src/provisioning/provisioning_manager.cpp"
     # "src/provisioning/ble_provisioner.cpp"
     # "src/provisioning/wifi_provisioner.cpp"
     # "src/provisioning/aws_provision_handler.cpp"
-
-    # State Machine (Future)
-    # "src/state_machine/state_machine.cpp"
 
     # Commands (Future)
     # "src/commands/command_router.cpp"

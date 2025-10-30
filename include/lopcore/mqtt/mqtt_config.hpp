@@ -397,6 +397,38 @@ public:
     }
 
     /**
+     * @brief Enable/disable automatic ProcessLoop task start on connect (CoreMQTT only)
+     *
+     * @param autoStart If true, ProcessLoop task starts automatically after connect.
+     *                  If false, you must manually call startProcessLoopTask().
+     * @return Reference to builder for chaining
+     *
+     * @note This only affects CoreMQTT client. ESP-MQTT handles this internally.
+     * @note Default is true (automatic start)
+     */
+    MqttConfigBuilder &autoStartProcessLoop(bool autoStart)
+    {
+        config_.autoStartProcessLoop = autoStart;
+        return *this;
+    }
+
+    /**
+     * @brief Set ProcessLoop task sleep delay in milliseconds (CoreMQTT only)
+     *
+     * @param delayMs Delay between ProcessLoop iterations (1-1000ms)
+     * @return Reference to builder for chaining
+     *
+     * @note Lower values = more responsive but higher CPU usage
+     * @note Higher values = less CPU usage but slower message processing
+     * @note Default is 10ms
+     */
+    MqttConfigBuilder &processLoopDelay(uint32_t delayMs)
+    {
+        config_.processLoopDelayMs = delayMs;
+        return *this;
+    }
+
+    /**
      * @brief Set TLS configuration
      *
      * @note Use lopcore::tls::TlsConfigBuilder to create TlsConfig

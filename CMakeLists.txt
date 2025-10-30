@@ -71,6 +71,8 @@ set(LOPCORE_REQUIRES
     mqtt          # ESP-IDF native MQTT (for EspMqttClient)
     mbedtls
     json
+    coreMQTT      # AWS IoT coreMQTT library
+    corePKCS11    # PKCS#11 for TLS
     # bt          # Optional: for BLE provisioning
 )
 

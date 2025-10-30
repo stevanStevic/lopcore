@@ -164,24 +164,6 @@ test = LoggingTest(port="/dev/ttyUSB0")
 test.execute()
 ```
 
-## Test Schedule (12 Weeks)
-
-| Week | Component     | Unit Tests | Hardware Tests | Target         |
-| ---- | ------------- | ---------- | -------------- | -------------- |
-| 1    | Foundation    | 1 dummy    | 1 connection   | Setup verified |
-| 2    | Logging       | 10+        | 1 SPIFFS       | >80% coverage  |
-| 3    | Storage       | 15+        | 2 persistence  | >80% coverage  |
-| 4    | MQTT          | 12+        | 1 AWS IoT      | >75% coverage  |
-| 5-6  | Provisioning  | 25+        | 3 full flow    | >75% coverage  |
-| 7    | State Machine | 15+        | 1 transitions  | >85% coverage  |
-| 8    | Commands      | 18+        | 2 execution    | >80% coverage  |
-| 9    | Camera        | 8+         | 2 capture      | >70% coverage  |
-| 10   | Sensors       | 12+        | 3 reading      | >75% coverage  |
-| 11   | Cloud         | 10+        | 2 E2E          | >70% coverage  |
-| 12   | Integration   | 5+         | 15 full        | All pass       |
-
-**Total**: 130+ unit tests, 30+ hardware tests
-
 ## Continuous Integration
 
 ### Pre-commit Checks
@@ -204,15 +186,6 @@ test.execute()
 3. **Coverage Stage**: Generate and upload coverage report
 4. **Hardware Test Stage**: Run smoke tests on real device
 5. **Integration Stage**: Full end-to-end test
-
-## Test Results Tracking
-
-After each week's testing:
-
-1. Update `docs/MIGRATION_GAME_PLAN.md` with test counts
-2. Document any failing tests in GitHub issues
-3. Update coverage metrics in `components/lopcore/README.md`
-4. Add regression tests for any bugs found
 
 ## Debugging Tests
 
@@ -237,34 +210,3 @@ python3 test_logging.py --port /dev/ttyUSB0 --log-level DEBUG
 # Monitor serial output separately
 screen /dev/ttyUSB0 115200
 ```
-
-## Current Status
-
-### Week 1 - Foundation ✓
-
--   [x] Google Test setup (v1.14.0)
--   [x] Mock headers (esp_log, esp_err)
--   [x] Dummy unit test (passes)
--   [x] Python test template
--   [ ] Build verification on host
--   [ ] Hardware connection test
-
-**Next**: Run dummy test, verify build succeeds
-
-### Week 2+ - Component Tests (Planned)
-
-See `docs/MIGRATION_GAME_PLAN.md` for detailed test plans.
-
-## Resources
-
--   [Google Test Primer](https://google.github.io/googletest/primer.html)
--   [ESP-IDF Unit Testing](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/unit-tests.html)
--   [pytest Documentation](https://docs.pytest.org/)
--   [Serial Communication (pyserial)](https://pyserial.readthedocs.io/)
-
-## Contact
-
-For questions about testing:
-
--   See `docs/MIGRATION_GAME_PLAN.md` for test strategy
--   See `components/lopcore/README.md` for component details

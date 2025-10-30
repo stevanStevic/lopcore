@@ -3,6 +3,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "lopcore/logging/logger.hpp"
 #include "lopcore/tls/pkcs11_provider.hpp"
 
 // Backoff algorithm for retries
@@ -10,9 +11,6 @@
 
 // Clock for sleep
 #include <clock.h>
-
-// Logging
-#include "esp_log.h"
 
 static const char *TAG = "MbedtlsTransport";
 
@@ -36,7 +34,7 @@ MbedtlsTransport::MbedtlsTransport()
     mutex_ = xSemaphoreCreateMutex();
     if (mutex_ == nullptr)
     {
-        ESP_LOGE(TAG, "Failed to create mutex");
+        LOPCORE_LOGE(TAG, "Failed to create mutex");
     }
 }
 
@@ -93,18 +91,18 @@ MbedtlsTransport &MbedtlsTransport::operator=(MbedtlsTransport &&other) noexcept
 
 esp_err_t MbedtlsTransport::connect(const TlsConfig &config)
 {
-    // Validate configuration
+    // Validate configuration (detailed error messages are logged by validate())
     esp_err_t err = config.validate();
     if (err != ESP_OK)
     {
-        ESP_LOGE(TAG, "Invalid TLS configuration: %d", err);
+        LOPCORE_LOGE(TAG, "TLS configuration validation failed");
         return err;
     }
 
     // Take mutex
     if (mutex_ == nullptr || xSemaphoreTake(mutex_, portMAX_DELAY) != pdTRUE)
     {
-        ESP_LOGE(TAG, "Failed to take mutex");
+        LOPCORE_LOGE(TAG, "Failed to take mutex");
         return ESP_FAIL;
     }
 
@@ -112,7 +110,7 @@ esp_err_t MbedtlsTransport::connect(const TlsConfig &config)
     if (connected_)
     {
         xSemaphoreGive(mutex_);
-        ESP_LOGW(TAG, "Already connected");
+        LOPCORE_LOGW(TAG, "Already connected");
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -123,7 +121,7 @@ esp_err_t MbedtlsTransport::connect(const TlsConfig &config)
     if (err != ESP_OK)
     {
         xSemaphoreGive(mutex_);
-        ESP_LOGE(TAG, "Failed to get PKCS#11 session: %d", err);
+        LOPCORE_LOGE(TAG, "Failed to get PKCS#11 session: %d", err);
         return err;
     }
 
@@ -132,7 +130,7 @@ esp_err_t MbedtlsTransport::connect(const TlsConfig &config)
     if (!pkcs11Session_.isValid())
     {
         xSemaphoreGive(mutex_);
-        ESP_LOGE(TAG, "Failed to create PKCS#11 session wrapper");
+        LOPCORE_LOGE(TAG, "Failed to create PKCS#11 session wrapper");
         return pkcs11Session_.error();
     }
 
@@ -143,7 +141,7 @@ esp_err_t MbedtlsTransport::connect(const TlsConfig &config)
     if (!tlsContext_ || !networkContext_)
     {
         xSemaphoreGive(mutex_);
-        ESP_LOGE(TAG, "Failed to allocate memory for contexts");
+        LOPCORE_LOGE(TAG, "Failed to allocate memory for contexts");
         return ESP_ERR_NO_MEM;
     }
 
@@ -161,14 +159,14 @@ esp_err_t MbedtlsTransport::connect(const TlsConfig &config)
     {
         // Connection successful
         connected_ = true;
-        ESP_LOGI(TAG, "Successfully connected to %s:%u", config.hostname.c_str(), config.port);
+        LOPCORE_LOGI(TAG, "Successfully connected to %s:%u", config.hostname.c_str(), config.port);
     }
     else
     {
         // Connection failed - clean up
         tlsContext_.reset();
         networkContext_.reset();
-        ESP_LOGE(TAG, "Failed to connect to %s:%u after retries", config.hostname.c_str(), config.port);
+        LOPCORE_LOGE(TAG, "Failed to connect to %s:%u after retries", config.hostname.c_str(), config.port);
     }
 
     xSemaphoreGive(mutex_);
@@ -184,7 +182,7 @@ void MbedtlsTransport::disconnect() noexcept
 
     if (connected_ && networkContext_)
     {
-        ESP_LOGI(TAG, "Disconnecting TLS connection");
+        LOPCORE_LOGI(TAG, "Disconnecting TLS connection");
         Mbedtls_Pkcs11_Disconnect(networkContext_.get());
         connected_ = false;
     }
@@ -228,7 +226,7 @@ esp_err_t MbedtlsTransport::send(const void *data, size_t size, size_t *bytesSen
 
     if (result < 0)
     {
-        ESP_LOGE(TAG, "Send failed: %ld", result);
+        LOPCORE_LOGE(TAG, "Send failed: %ld", result);
         return ESP_FAIL;
     }
 
@@ -265,7 +263,7 @@ esp_err_t MbedtlsTransport::recv(void *buffer, size_t size, size_t *bytesReceive
 
     if (result < 0)
     {
-        ESP_LOGE(TAG, "Receive failed: %ld", result);
+        LOPCORE_LOGE(TAG, "Receive failed: %ld", result);
         return ESP_FAIL;
     }
 
@@ -312,15 +310,25 @@ esp_err_t MbedtlsTransport::convertMbedtlsError(MbedtlsPkcs11Status_t status)
         case MBEDTLS_PKCS11_SUCCESS:
             return ESP_OK;
         case MBEDTLS_PKCS11_INVALID_PARAMETER:
+            LOPCORE_LOGE(TAG, "MbedTLS error: Invalid parameter (check if CA cert path is set)");
             return ESP_ERR_INVALID_ARG;
         case MBEDTLS_PKCS11_INSUFFICIENT_MEMORY:
+            LOPCORE_LOGE(TAG, "MbedTLS error: Insufficient memory");
             return ESP_ERR_NO_MEM;
         case MBEDTLS_PKCS11_INVALID_CREDENTIALS:
+            LOPCORE_LOGE(TAG, "MbedTLS error: Invalid credentials (check cert/key labels)");
             return ESP_ERR_INVALID_ARG;
         case MBEDTLS_PKCS11_HANDSHAKE_FAILED:
+            LOPCORE_LOGE(TAG, "MbedTLS error: TLS handshake failed");
+            return ESP_FAIL;
         case MBEDTLS_PKCS11_INTERNAL_ERROR:
+            LOPCORE_LOGE(TAG, "MbedTLS error: Internal error");
+            return ESP_FAIL;
         case MBEDTLS_PKCS11_CONNECT_FAILURE:
+            LOPCORE_LOGE(TAG, "MbedTLS error: Connection failure");
+            return ESP_FAIL;
         default:
+            LOPCORE_LOGE(TAG, "MbedTLS error: Unknown error code %d", status);
             return ESP_FAIL;
     }
 }
@@ -366,7 +374,7 @@ esp_err_t MbedtlsTransport::connectWithRetries(const TlsConfig &config)
 
     do
     {
-        ESP_LOGI(TAG, "Attempting TLS connection to %s:%u", config.hostname.c_str(), config.port);
+        LOPCORE_LOGI(TAG, "Attempting TLS connection to %s:%u", config.hostname.c_str(), config.port);
 
         // Attempt connection
         MbedtlsPkcs11Status_t tlsStatus = Mbedtls_Pkcs11_Connect(networkContext_.get(),
@@ -382,12 +390,12 @@ esp_err_t MbedtlsTransport::connectWithRetries(const TlsConfig &config)
 
             if (backoffStatus == BackoffAlgorithmSuccess)
             {
-                ESP_LOGW(TAG, "Connection failed, retrying after %u ms backoff", nextBackoffMs);
+                LOPCORE_LOGW(TAG, "Connection failed, retrying after %u ms backoff", nextBackoffMs);
                 Clock_SleepMs(nextBackoffMs);
             }
             else
             {
-                ESP_LOGE(TAG, "Connection failed, all retry attempts exhausted");
+                LOPCORE_LOGE(TAG, "Connection failed, all retry attempts exhausted");
             }
         }
 
@@ -395,7 +403,7 @@ esp_err_t MbedtlsTransport::connectWithRetries(const TlsConfig &config)
 
     if (!success)
     {
-        ESP_LOGE(TAG, "Failed to establish TLS connection after all retries");
+        LOPCORE_LOGE(TAG, "Failed to establish TLS connection after all retries");
         return ESP_FAIL;
     }
 

@@ -25,8 +25,8 @@ TEST(DummyTest, BasicAssertion)
  */
 TEST(DummyTest, StringComparison)
 {
-    std::string expected = "Hello, GrowBorg!";
-    std::string actual = "Hello, GrowBorg!";
+    std::string expected = "Hello, World!";
+    std::string actual = "Hello, World!";
     EXPECT_EQ(expected, actual);
 }
 

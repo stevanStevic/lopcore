@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <esp_err.h>
+#include <lopcore/logging/logger.hpp>
 
 namespace lopcore
 {
@@ -78,13 +79,19 @@ struct TlsConfig
      */
     esp_err_t validate() const
     {
+        static const char *TAG = "TlsConfig";
+        bool hasError = false;
+
         if (hostname.empty())
         {
-            return ESP_ERR_INVALID_ARG;
+            LOPCORE_LOGE(TAG, "Validation failed: hostname is required");
+            hasError = true;
         }
+
         if (port == 0)
         {
-            return ESP_ERR_INVALID_ARG;
+            LOPCORE_LOGE(TAG, "Validation failed: port must be non-zero");
+            hasError = true;
         }
 
         // Certificate validation only if peer verification enabled
@@ -92,15 +99,32 @@ struct TlsConfig
         {
             if (clientCertLabel.empty())
             {
-                return ESP_ERR_INVALID_ARG;
+                LOPCORE_LOGE(TAG,
+                             "Validation failed: client certificate label is required when verifyPeer=true");
+                hasError = true;
             }
+
             if (clientKeyLabel.empty())
             {
-                return ESP_ERR_INVALID_ARG;
+                LOPCORE_LOGE(TAG, "Validation failed: private key label is required when verifyPeer=true");
+                hasError = true;
+            }
+
+            // When using PKCS#11 (cert/key labels), CA certificate is required for server verification
+            // This prevents the cryptic "Arguments cannot be NULL" error from mbedtls-pkcs11
+            if (!clientCertLabel.empty() && caCertPath.empty())
+            {
+                LOPCORE_LOGE(TAG, "Validation failed: CA certificate path is required when using PKCS#11");
+                hasError = true;
             }
         }
 
-        // CA cert path is optional for some use cases (e.g., self-signed)
+        if (hasError)
+        {
+            LOPCORE_LOGE(TAG, "TLS configuration is invalid");
+            return ESP_ERR_INVALID_ARG;
+        }
+
         return ESP_OK;
     }
 };

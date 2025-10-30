@@ -140,7 +140,7 @@ gtest_discover_tests(test_coremqtt_client_simple)
 #target_link_libraries(test_coremqtt_client GTest::gtest_main)
 #gtest_discover_tests(test_coremqtt_client)
 
-# Phase 4: MQTT Client Factory tests ✅ NEW
+# Phase 4: MQTT Client Factory tests
 # NOTE: This test requires ESP-IDF environment to run (ESP-MQTT, mbedtls dependencies)
 # Run in ESP-IDF environment or add full ESP-IDF mocks
 add_executable(test_mqtt_client_factory
@@ -156,6 +156,15 @@ add_executable(test_mock_tls_transport
 )
 target_link_libraries(test_mock_tls_transport GTest::gtest_main pthread)
 gtest_discover_tests(test_mock_tls_transport)
+
+# TLS Config validation tests (host-compatible)
+add_executable(test_tls_config
+    unit/tls/test_tls_config.cpp
+    ${LOPCORE_BASE_DIR}/src/logging/logger.cpp
+    ${LOPCORE_BASE_DIR}/src/logging/console_sink.cpp
+)
+target_link_libraries(test_tls_config GTest::gtest_main pthread)
+gtest_discover_tests(test_tls_config)
 
 # MQTT Operations Tests (publish/subscribe/unsubscribe logic)
 add_executable(test_mqtt_operations

@@ -6,7 +6,7 @@
  * The structure uses an opaque pointer to allow different TLS implementations
  * (MbedTLS, BearSSL, WolfSSL, etc.) without creating hard dependencies.
  *
- * @copyright Copyright (c) 2025 GrowBorg
+ * @copyright Copyright (c) 2025 LopCore Contributors
  */
 
 #ifndef NETWORK_CONTEXT_H

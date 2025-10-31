@@ -1,13 +1,14 @@
 /**
  * @file coremqtt_client.hpp
- * @brief Wrapper around AWS coreMQTT library implementing IMqttClient interface
+ * @brief Standalone AWS coreMQTT library wrapper
  *
  * This class wraps the AWS IoT coreMQTT library to provide:
- * - IMqttClient interface implementation
+ * - Standalone MQTT client (no interface inheritance)
  * - C++ RAII resource management
  * - Integration with LopCore logging and configuration
  * - TLS/PKCS#11 transport support
  * - Stateful QoS tracking for AWS IoT reliability
+ * - Manual processing capability (processLoop)
  *
  * Use this implementation for AWS IoT Core connectivity where stateful
  * QoS tracking and explicit state machine control are required.
@@ -27,9 +28,9 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "lopcore/mqtt/imqtt_client.hpp"
 #include "lopcore/mqtt/mqtt_budget.hpp"
 #include "lopcore/mqtt/mqtt_config.hpp"
+#include "lopcore/mqtt/mqtt_types.hpp"
 
 // Forward declarations for TLS transport
 namespace lopcore
@@ -66,21 +67,22 @@ namespace mqtt
 {
 
 /**
- * @brief coreMQTT-based MQTT client implementation
+ * @brief coreMQTT-based standalone MQTT client
  *
- * This class wraps the AWS IoT coreMQTT library to provide an IMqttClient
- * interface with the following characteristics:
+ * This class wraps the AWS IoT coreMQTT library as a standalone component
+ * with the following characteristics:
  *
  * Features:
  * - Stateful QoS tracking (critical for AWS Device Shadow)
  * - Explicit state machine control (required for AWS IoT Jobs)
  * - Manual polling model (needed for Fleet Provisioning)
+ * - Automatic background processing (optional ProcessLoop task)
  * - Minimal memory footprint (~5 KB RAM)
  * - Transport abstraction (TLS + PKCS#11)
  *
  * Architecture:
  * - Polling-based: Application calls processLoop() to handle network I/O
- * - Synchronous: All operations block until complete
+ * - Supports both synchronous and asynchronous modes
  * - State exposure: Can inspect QoS state arrays
  *
  * Use Cases:
@@ -91,9 +93,9 @@ namespace mqtt
  *
  * Thread Safety:
  * - Methods are thread-safe via mutex
- * - processLoop() must be called regularly from a task
+ * - processLoop() must be called regularly (manually or via background task)
  */
-class CoreMqttClient : public IMqttClient
+class CoreMqttClient
 {
 public:
     /**
@@ -123,46 +125,46 @@ public:
     /**
      * @brief Destructor - cleans up resources
      */
-    ~CoreMqttClient() override;
+    ~CoreMqttClient();
 
     // Disable copy
     CoreMqttClient(const CoreMqttClient &) = delete;
     CoreMqttClient &operator=(const CoreMqttClient &) = delete;
 
     // =============================================================================
-    // IMqttClient Interface Implementation
+    // Core MQTT Operations
     // =============================================================================
 
-    esp_err_t connect() override;
-    esp_err_t disconnect() override;
-    bool isConnected() const override;
+    esp_err_t connect();
+    esp_err_t disconnect();
+    bool isConnected() const;
 
     esp_err_t publish(const std::string &topic,
                       const std::vector<uint8_t> &payload,
                       MqttQos qos = MqttQos::AT_MOST_ONCE,
-                      bool retain = false) override;
+                      bool retain = false);
 
     esp_err_t publishString(const std::string &topic,
                             const std::string &payload,
                             MqttQos qos = MqttQos::AT_MOST_ONCE,
-                            bool retain = false) override;
+                            bool retain = false);
 
     esp_err_t subscribe(const std::string &topic,
                         MessageCallback callback,
-                        MqttQos qos = MqttQos::AT_MOST_ONCE) override;
+                        MqttQos qos = MqttQos::AT_MOST_ONCE);
 
-    esp_err_t unsubscribe(const std::string &topic) override;
+    esp_err_t unsubscribe(const std::string &topic);
 
     esp_err_t setWillMessage(const std::string &topic,
                              const std::vector<uint8_t> &payload,
                              MqttQos qos = MqttQos::AT_MOST_ONCE,
-                             bool retain = false) override;
+                             bool retain = false);
 
-    void setConnectionCallback(ConnectionCallback callback) override;
-    void setErrorCallback(ErrorCallback callback) override;
+    void setConnectionCallback(ConnectionCallback callback);
+    void setErrorCallback(ErrorCallback callback);
 
-    MqttStatistics getStatistics() const override;
-    void resetStatistics() override;
+    MqttStatistics getStatistics() const;
+    void resetStatistics();
 
     // =============================================================================
     // CoreMQTT-Specific Methods
@@ -241,20 +243,40 @@ public:
      */
     bool isProcessLoopTaskRunning() const;
 
-    // Implement required interface methods
-    MqttConnectionState getConnectionState() const override
+    /**
+     * @brief Enable/disable automatic background processing
+     *
+     * When enabled, the ProcessLoop task runs automatically in the background.
+     * When disabled, you must call processLoop() manually.
+     *
+     * @param enable true to start background task, false to stop it
+     * @return ESP_OK on success
+     */
+    esp_err_t setAutoProcessing(bool enable);
+
+    /**
+     * @brief Check if automatic processing is enabled
+     * @return true if ProcessLoop task is running
+     */
+    bool isAutoProcessingEnabled() const;
+
+    // =============================================================================
+    // Accessors (no virtual - plain getters)
+    // =============================================================================
+
+    MqttConnectionState getConnectionState() const
     {
         return state_;
     }
-    std::string getClientId() const override
+    std::string getClientId() const
     {
         return config_.clientId;
     }
-    std::string getBroker() const override
+    std::string getBroker() const
     {
         return config_.broker;
     }
-    uint16_t getPort() const override
+    uint16_t getPort() const
     {
         return config_.port;
     }

@@ -140,15 +140,9 @@ gtest_discover_tests(test_coremqtt_client_simple)
 #target_link_libraries(test_coremqtt_client GTest::gtest_main)
 #gtest_discover_tests(test_coremqtt_client)
 
-# Phase 4: MQTT Client Factory tests
-# NOTE: This test requires ESP-IDF environment to run (ESP-MQTT, mbedtls dependencies)
-# Run in ESP-IDF environment or add full ESP-IDF mocks
-add_executable(test_mqtt_client_factory
-    unit/mqtt/test_mqtt_client_factory.cpp
-    ${LOPCORE_BASE_DIR}/src/mqtt/mqtt_client_factory.cpp
-)
-target_link_libraries(test_mqtt_client_factory GTest::gtest_main pthread)
-gtest_discover_tests(test_mqtt_client_factory)
+# Phase 4: MQTT Client Factory tests - REMOVED
+# Factory pattern replaced with direct construction of CoreMqttClient/EspMqttClient
+# See mqtt_traits.hpp for capability-based template programming
 
 # Mock TLS Transport tests (host-compatible)
 add_executable(test_mock_tls_transport
@@ -182,6 +176,27 @@ target_link_libraries(test_mqtt_operations PRIVATE
 )
 
 gtest_discover_tests(test_mqtt_operations)
+
+# Standalone MQTT Clients Tests (Trait-based compile-time tests)
+# Note: Full client tests require ESP-IDF environment
+add_executable(test_mqtt_clients_standalone
+    unit/mqtt/test_mqtt_clients_standalone.cpp
+    ${LOPCORE_BASE_DIR}/src/logging/logger.cpp
+    ${LOPCORE_BASE_DIR}/src/logging/console_sink.cpp
+)
+
+target_include_directories(test_mqtt_clients_standalone PRIVATE
+    ${LOPCORE_INCLUDE_DIRS}
+    ${CMAKE_CURRENT_SOURCE_DIR}/mocks
+)
+
+target_link_libraries(test_mqtt_clients_standalone PRIVATE
+    gtest
+    gtest_main
+    pthread
+)
+
+gtest_discover_tests(test_mqtt_clients_standalone)
 
 # Add more tests as components are implemented...
 

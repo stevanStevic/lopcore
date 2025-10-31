@@ -869,6 +869,25 @@ bool CoreMqttClient::isProcessLoopTaskRunning() const
     return processTask_ != nullptr;
 }
 
+esp_err_t CoreMqttClient::setAutoProcessing(bool enable)
+{
+    if (enable)
+    {
+        // Enable automatic processing - start background task
+        return startProcessLoopTask();
+    }
+    else
+    {
+        // Disable automatic processing - stop background task
+        return stopProcessLoopTask();
+    }
+}
+
+bool CoreMqttClient::isAutoProcessingEnabled() const
+{
+    return isProcessLoopTaskRunning();
+}
+
 void CoreMqttClient::processLoopTaskWrapper(void *pvParameters)
 {
     CoreMqttClient *client = static_cast<CoreMqttClient *>(pvParameters);

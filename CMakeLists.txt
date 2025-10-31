@@ -34,7 +34,6 @@ set(LOPCORE_SRCS
     "src/mqtt/mqtt_budget.cpp"
     "src/mqtt/esp_mqtt_client.cpp"
     "src/mqtt/coremqtt_client.cpp"
-    "src/mqtt/mqtt_client_factory.cpp"
 
     # State Machine subsystem (header-only template)
     # No .cpp files needed - template implementation in headers

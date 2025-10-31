@@ -1,8 +1,8 @@
 /**
  * @file esp_mqtt_client.hpp
- * @brief ESP-IDF MQTT client wrapper
+ * @brief Standalone ESP-IDF MQTT client wrapper
  *
- * Wraps ESP-MQTT library with IMqttClient interface for type safety,
+ * Wraps ESP-MQTT library as a standalone component for type safety,
  * testability, and modern C++ patterns.
  *
  * @copyright Copyright (c) 2025
@@ -21,7 +21,6 @@
 
 #include <mqtt_client.h>
 
-#include "imqtt_client.hpp"
 #include "mqtt_budget.hpp"
 #include "mqtt_config.hpp"
 #include "mqtt_types.hpp"
@@ -32,9 +31,9 @@ namespace mqtt
 {
 
 /**
- * @brief ESP-MQTT client implementation
+ * @brief Standalone ESP-MQTT client
  *
- * Wraps ESP-IDF's mqtt_client component with our clean interface.
+ * Wraps ESP-IDF's mqtt_client component as a standalone component.
  *
  * Features:
  * - Automatic reconnection with exponential backoff
@@ -42,10 +41,12 @@ namespace mqtt
  * - TLS/SSL with PKCS#11 support
  * - Subscription persistence across reconnects
  * - Thread-safe operation
+ * - Async-only (no manual processing)
  *
  * @note Thread-safe: All public methods can be called from multiple tasks
+ * @note Does NOT support manual processing (processLoop) - async only
  */
-class EspMqttClient : public IMqttClient
+class EspMqttClient
 {
 public:
     /**
@@ -57,7 +58,7 @@ public:
     /**
      * @brief Destructor - cleans up resources
      */
-    ~EspMqttClient() override;
+    ~EspMqttClient();
 
     // Non-copyable, non-movable
     EspMqttClient(const EspMqttClient &) = delete;
@@ -66,45 +67,48 @@ public:
     EspMqttClient &operator=(EspMqttClient &&) = delete;
 
     // ========================================================================
-    // IMqttClient Interface Implementation
+    // Core MQTT Operations
     // ========================================================================
 
-    esp_err_t connect() override;
-    esp_err_t disconnect() override;
-    bool isConnected() const override;
-    MqttConnectionState getConnectionState() const override;
+    esp_err_t connect();
+    esp_err_t disconnect();
+    bool isConnected() const;
+    MqttConnectionState getConnectionState() const;
 
     esp_err_t
-    publish(const std::string &topic, const std::vector<uint8_t> &payload, MqttQos qos, bool retain) override;
+    publish(const std::string &topic, const std::vector<uint8_t> &payload, MqttQos qos, bool retain);
 
     esp_err_t
-    publishString(const std::string &topic, const std::string &payload, MqttQos qos, bool retain) override;
+    publishString(const std::string &topic, const std::string &payload, MqttQos qos, bool retain);
 
-    esp_err_t subscribe(const std::string &topic, MessageCallback callback, MqttQos qos) override;
+    esp_err_t subscribe(const std::string &topic, MessageCallback callback, MqttQos qos);
 
-    esp_err_t unsubscribe(const std::string &topic) override;
+    esp_err_t unsubscribe(const std::string &topic);
 
-    void setConnectionCallback(ConnectionCallback callback) override;
-    void setErrorCallback(ErrorCallback callback) override;
+    void setConnectionCallback(ConnectionCallback callback);
+    void setErrorCallback(ErrorCallback callback);
 
     esp_err_t setWillMessage(const std::string &topic,
                              const std::vector<uint8_t> &payload,
                              MqttQos qos,
-                             bool retain) override;
+                             bool retain);
 
-    MqttStatistics getStatistics() const override;
-    void resetStatistics() override;
+    MqttStatistics getStatistics() const;
+    void resetStatistics();
 
-    // Implement required interface getters (inline implementations)
-    std::string getClientId() const override
+    // ========================================================================
+    // Accessors (no virtual - plain getters)
+    // ========================================================================
+
+    std::string getClientId() const
     {
         return config_.clientId;
     }
-    std::string getBroker() const override
+    std::string getBroker() const
     {
         return config_.broker;
     }
-    uint16_t getPort() const override
+    uint16_t getPort() const
     {
         return config_.port;
     }

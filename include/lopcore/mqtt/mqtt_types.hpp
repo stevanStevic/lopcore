@@ -9,6 +9,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -16,6 +17,29 @@ namespace lopcore
 {
 namespace mqtt
 {
+
+// Forward declarations
+struct MqttMessage;
+enum class MqttError;
+
+/**
+ * @brief Callback for incoming MQTT messages
+ * @param message The received message
+ */
+using MessageCallback = std::function<void(const MqttMessage &message)>;
+
+/**
+ * @brief Callback for connection state changes
+ * @param connected True if connected, false if disconnected
+ */
+using ConnectionCallback = std::function<void(bool connected)>;
+
+/**
+ * @brief Callback for error events
+ * @param error The error code
+ * @param message Human-readable error description
+ */
+using ErrorCallback = std::function<void(MqttError error, const std::string &message)>;
 
 /**
  * @brief MQTT Quality of Service levels

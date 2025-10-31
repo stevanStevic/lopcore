@@ -42,8 +42,8 @@ namespace test
  * mockTransport->enqueueSendResult(100);    // Next send returns 100 bytes
  * mockTransport->enqueueReceiveData("HELLO"); // Next receive returns "HELLO"
  *
- * // Use in tests
- * auto client = MqttClientFactory::create(AWS_IOT, config, mockTransport);
+ * // Use in tests with direct construction
+ * auto client = std::make_unique<CoreMqttClient>(config, mockTransport);
  * @endcode
  */
 class MockTlsTransport : public lopcore::tls::ITlsTransport

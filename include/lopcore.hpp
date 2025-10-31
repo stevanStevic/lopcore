@@ -37,9 +37,9 @@
 #include "lopcore/mqtt/esp_mqtt_client.hpp"
 #include "lopcore/mqtt/imqtt_client.hpp"
 #include "lopcore/mqtt/mqtt_budget.hpp"
-#include "lopcore/mqtt/mqtt_client_factory.hpp"
 #include "lopcore/mqtt/mqtt_config.hpp"
 #include "lopcore/mqtt/mqtt_types.hpp"
+#include "lopcore/mqtt/mqtt_traits.hpp"
 #if LOPCORE_COREMQTT_ENABLED
 #include "lopcore/mqtt/coremqtt_client.hpp"
 #endif

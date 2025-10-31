@@ -479,8 +479,23 @@ esp_err_t CoreMqttClient::processLoop(uint32_t timeoutMs)
         return ESP_ERR_INVALID_STATE;
     }
 
-    MQTTStatus_t mqttStatus = MQTT_ProcessLoop(&mqttContext_);
+    // Calculate timeout deadline
+    uint32_t startTimeMs = getTimeMs();
+    uint32_t endTimeMs = startTimeMs + timeoutMs;
+    uint32_t currentTimeMs = startTimeMs;
 
+    MQTTStatus_t mqttStatus = MQTTSuccess;
+
+    // Call MQTT_ProcessLoop repeatedly until timeout expires
+    // MQTT_ProcessLoop() processes exactly one MQTT packet per call
+    // MQTTNeedMoreBytes means "no data available yet, try again"
+    while ((currentTimeMs < endTimeMs) && (mqttStatus == MQTTSuccess || mqttStatus == MQTTNeedMoreBytes))
+    {
+        mqttStatus = MQTT_ProcessLoop(&mqttContext_);
+        currentTimeMs = getTimeMs();
+    }
+
+    // Check for actual errors (not timeout-related)
     if (mqttStatus != MQTTSuccess && mqttStatus != MQTTNeedMoreBytes)
     {
         LOPCORE_LOGE(TAG, "MQTT_ProcessLoop failed: %d", mqttStatus);
@@ -502,6 +517,7 @@ esp_err_t CoreMqttClient::processLoop(uint32_t timeoutMs)
         return ESP_FAIL;
     }
 
+    // Timeout or success
     return ESP_OK;
 }
 
@@ -636,63 +652,69 @@ void CoreMqttClient::eventCallback(MQTTContext_t *pMqttContext,
 
 void CoreMqttClient::handleEvent(MQTTPacketInfo_t *pPacketInfo, MQTTDeserializedInfo_t *pDeserializedInfo)
 {
-    switch (pPacketInfo->type)
+    // Handle incoming publish. The lower 4 bits of the publish packet
+    // type is used for the dup, QoS, and retain flags. Hence masking
+    // out the lower bits to check if the packet is publish.
+    if ((pPacketInfo->type & 0xF0U) == MQTT_PACKET_TYPE_PUBLISH)
     {
-        case MQTT_PACKET_TYPE_PUBLISH: {
-            // Incoming message
-            MQTTPublishInfo_t *pubInfo = pDeserializedInfo->pPublishInfo;
+        // Incoming message
+        MQTTPublishInfo_t *pubInfo = pDeserializedInfo->pPublishInfo;
 
-            std::string topic(pubInfo->pTopicName, pubInfo->topicNameLength);
-            std::vector<uint8_t> payload(static_cast<const uint8_t *>(pubInfo->pPayload),
-                                         static_cast<const uint8_t *>(pubInfo->pPayload) +
-                                             pubInfo->payloadLength);
+        std::string topic(pubInfo->pTopicName, pubInfo->topicNameLength);
+        std::vector<uint8_t> payload(static_cast<const uint8_t *>(pubInfo->pPayload),
+                                     static_cast<const uint8_t *>(pubInfo->pPayload) +
+                                         pubInfo->payloadLength);
 
-            statistics_.messagesReceived++;
-            // Note: bytesReceived not in MqttStatistics struct
+        statistics_.messagesReceived++;
+        // Note: bytesReceived not in MqttStatistics struct
 
-            LOPCORE_LOGD(TAG, "Received message on '%s' (size=%zu)", topic.c_str(), payload.size());
+        LOPCORE_LOGD(TAG, "Received message on '%s' (size=%zu)", topic.c_str(), payload.size());
 
-            // Call topic-specific callback
-            Subscription *sub = findSubscription(topic);
-            if (sub && sub->callback)
-            {
-                MqttMessage msg{topic, payload, static_cast<MqttQos>(pubInfo->qos), pubInfo->retain};
-                sub->callback(msg);
-            }
-            break;
+        // Call topic-specific callback
+        Subscription *sub = findSubscription(topic);
+        if (sub && sub->callback)
+        {
+            MqttMessage msg{topic, payload, static_cast<MqttQos>(pubInfo->qos), pubInfo->retain};
+            sub->callback(msg);
         }
+    }
+    else
+    {
+        // Handle other packets (no masking needed for non-PUBLISH types)
+        switch (pPacketInfo->type)
+        {
+            case MQTT_PACKET_TYPE_SUBACK:
+                LOPCORE_LOGD(TAG, "SUBACK received");
+                break;
 
-        case MQTT_PACKET_TYPE_SUBACK:
-            LOPCORE_LOGD(TAG, "SUBACK received");
-            break;
+            case MQTT_PACKET_TYPE_UNSUBACK:
+                LOPCORE_LOGD(TAG, "UNSUBACK received");
+                break;
 
-        case MQTT_PACKET_TYPE_UNSUBACK:
-            LOPCORE_LOGD(TAG, "UNSUBACK received");
-            break;
+            case MQTT_PACKET_TYPE_PUBACK:
+                LOPCORE_LOGD(TAG, "PUBACK received (packetId=%u)", pDeserializedInfo->packetIdentifier);
+                break;
 
-        case MQTT_PACKET_TYPE_PUBACK:
-            LOPCORE_LOGD(TAG, "PUBACK received (packetId=%u)", pDeserializedInfo->packetIdentifier);
-            break;
+            case MQTT_PACKET_TYPE_PUBREC:
+                LOPCORE_LOGD(TAG, "PUBREC received (packetId=%u)", pDeserializedInfo->packetIdentifier);
+                break;
 
-        case MQTT_PACKET_TYPE_PUBREC:
-            LOPCORE_LOGD(TAG, "PUBREC received (packetId=%u)", pDeserializedInfo->packetIdentifier);
-            break;
+            case MQTT_PACKET_TYPE_PUBREL:
+                LOPCORE_LOGD(TAG, "PUBREL received (packetId=%u)", pDeserializedInfo->packetIdentifier);
+                break;
 
-        case MQTT_PACKET_TYPE_PUBREL:
-            LOPCORE_LOGD(TAG, "PUBREL received (packetId=%u)", pDeserializedInfo->packetIdentifier);
-            break;
+            case MQTT_PACKET_TYPE_PUBCOMP:
+                LOPCORE_LOGD(TAG, "PUBCOMP received (packetId=%u)", pDeserializedInfo->packetIdentifier);
+                break;
 
-        case MQTT_PACKET_TYPE_PUBCOMP:
-            LOPCORE_LOGD(TAG, "PUBCOMP received (packetId=%u)", pDeserializedInfo->packetIdentifier);
-            break;
+            case MQTT_PACKET_TYPE_PINGRESP:
+                LOPCORE_LOGD(TAG, "PINGRESP received");
+                break;
 
-        case MQTT_PACKET_TYPE_PINGRESP:
-            LOPCORE_LOGD(TAG, "PINGRESP received");
-            break;
-
-        default:
-            LOPCORE_LOGW(TAG, "Unknown packet type: %d", pPacketInfo->type);
-            break;
+            default:
+                LOPCORE_LOGW(TAG, "Unknown packet type: %d", pPacketInfo->type);
+                break;
+        }
     }
 }
 
@@ -858,12 +880,13 @@ void CoreMqttClient::processLoopTaskWrapper(void *pvParameters)
 
 void CoreMqttClient::processLoopTask()
 {
-    LOPCORE_LOGI(TAG, "ProcessLoop task started (delay: %lu ms)", config_.processLoopDelayMs);
+    LOPCORE_LOGI(TAG, "ProcessLoop task started (timeout: %lu ms, delay: %lu ms)",
+                 config_.processLoopTimeoutMs, config_.processLoopDelayMs);
 
     while (shouldRun_ && state_ == MqttConnectionState::CONNECTED)
     {
-        // Call processLoop with timeout matching the delay
-        esp_err_t err = processLoop(config_.processLoopDelayMs);
+        // Call processLoop with configured timeout
+        esp_err_t err = processLoop(config_.processLoopTimeoutMs);
 
         if (err != ESP_OK)
         {
@@ -881,7 +904,7 @@ void CoreMqttClient::processLoopTask()
             }
         }
 
-        // Small delay to prevent busy-waiting
+        // Sleep between iterations to prevent busy-waiting
         vTaskDelay(pdMS_TO_TICKS(config_.processLoopDelayMs));
     }
 

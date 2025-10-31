@@ -164,7 +164,9 @@ public:
     std::string password;               ///< Password (optional)
     uint32_t networkBufferSize{4096};   ///< Network buffer size
     bool autoStartProcessLoop{true};    ///< Auto-start ProcessLoop task on connect (CoreMQTT only)
-    uint32_t processLoopDelayMs{10};    ///< ProcessLoop task sleep delay in milliseconds (CoreMQTT only)
+    uint32_t processLoopTimeoutMs{100}; ///< ProcessLoop timeout per call in milliseconds (CoreMQTT only)
+    uint32_t processLoopDelayMs{10}; ///< ProcessLoop task sleep delay between calls in milliseconds (CoreMQTT
+                                     ///< only)
 
     std::optional<TlsConfig> tls; ///< TLS configuration (optional - if not set, transport must be injected)
     BudgetConfig budget;          ///< Budgeting configuration
@@ -202,9 +204,14 @@ public:
             return ESP_ERR_INVALID_ARG;
         }
 
+        if (processLoopTimeoutMs == 0 || processLoopTimeoutMs > 5000)
+        {
+            return ESP_ERR_INVALID_ARG; // Timeout should be 1-5000ms
+        }
+
         if (processLoopDelayMs == 0 || processLoopDelayMs > 1000)
         {
-            return ESP_ERR_INVALID_ARG;
+            return ESP_ERR_INVALID_ARG; // Delay should be 1-1000ms
         }
 
         // Validate sub-configurations
@@ -409,6 +416,23 @@ public:
     MqttConfigBuilder &autoStartProcessLoop(bool autoStart)
     {
         config_.autoStartProcessLoop = autoStart;
+        return *this;
+    }
+
+    /**
+     * @brief Set ProcessLoop timeout per call in milliseconds (CoreMQTT only)
+     *
+     * @param timeoutMs How long to wait for packets in each processLoop() call (1-5000ms)
+     * @return Reference to builder for chaining
+     *
+     * @note This controls how long processLoop() blocks waiting for incoming data
+     * @note Lower values = more responsive to stop signals but more CPU usage
+     * @note Higher values = less CPU usage but slower responsiveness
+     * @note Default is 100ms
+     */
+    MqttConfigBuilder &processLoopTimeout(uint32_t timeoutMs)
+    {
+        config_.processLoopTimeoutMs = timeoutMs;
         return *this;
     }
 

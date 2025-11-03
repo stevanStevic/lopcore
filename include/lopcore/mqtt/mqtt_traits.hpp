@@ -47,12 +47,12 @@ namespace traits
  * static_assert(is_mqtt_client_v<CoreMqttClient>, "Must be MQTT client");
  * @endcode
  */
-template <typename T, typename = void>
+template<typename T, typename = void>
 struct is_mqtt_client : std::false_type
 {
 };
 
-template <typename T>
+template<typename T>
 struct is_mqtt_client<T,
                       std::void_t<decltype(std::declval<T>().connect()),
                                   decltype(std::declval<T>().disconnect()),
@@ -65,7 +65,7 @@ struct is_mqtt_client<T,
 {
 };
 
-template <typename T>
+template<typename T>
 inline constexpr bool is_mqtt_client_v = is_mqtt_client<T>::value;
 
 // ========================================
@@ -94,20 +94,21 @@ inline constexpr bool is_mqtt_client_v = is_mqtt_client<T>::value;
  * }
  * @endcode
  */
-template <typename T, typename = void>
+template<typename T, typename = void>
 struct has_manual_processing : std::false_type
 {
 };
 
-template <typename T>
+template<typename T>
 struct has_manual_processing<T,
                              std::void_t<decltype(std::declval<T>().processLoop(std::declval<uint32_t>())),
                                          decltype(std::declval<T>().setAutoProcessing(std::declval<bool>())),
-                                         decltype(std::declval<T>().isAutoProcessingEnabled())>> : std::true_type
+                                         decltype(std::declval<T>().isAutoProcessingEnabled())>>
+    : std::true_type
 {
 };
 
-template <typename T>
+template<typename T>
 inline constexpr bool has_manual_processing_v = has_manual_processing<T>::value;
 
 // ========================================
@@ -131,19 +132,20 @@ inline constexpr bool has_manual_processing_v = has_manual_processing<T>::value;
  * }
  * @endcode
  */
-template <typename T, typename = void>
+template<typename T, typename = void>
 struct has_statistics : std::false_type
 {
 };
 
-template <typename T>
-struct has_statistics<T,
-                      std::void_t<decltype(std::declval<T>().getStatistics()),
-                                  decltype(std::declval<T>().resetStatistics())>> : std::true_type
+template<typename T>
+struct has_statistics<
+    T,
+    std::void_t<decltype(std::declval<T>().getStatistics()), decltype(std::declval<T>().resetStatistics())>>
+    : std::true_type
 {
 };
 
-template <typename T>
+template<typename T>
 inline constexpr bool has_statistics_v = has_statistics<T>::value;
 
 // ========================================
@@ -167,20 +169,21 @@ inline constexpr bool has_statistics_v = has_statistics<T>::value;
  * }
  * @endcode
  */
-template <typename T, typename = void>
+template<typename T, typename = void>
 struct supports_qos2 : std::false_type
 {
 };
 
 // Check if publish() accepts EXACTLY_ONCE QoS
-template <typename T>
-struct supports_qos2<T, std::void_t<decltype(std::declval<T>().publish(std::declval<std::string>(),
-                                                                        std::declval<std::vector<uint8_t>>(),
-                                                                        MqttQos::EXACTLY_ONCE))>> : std::true_type
+template<typename T>
+struct supports_qos2<T,
+                     std::void_t<decltype(std::declval<T>().publish(std::declval<std::string>(),
+                                                                    std::declval<std::vector<uint8_t>>(),
+                                                                    MqttQos::EXACTLY_ONCE))>> : std::true_type
 {
 };
 
-template <typename T>
+template<typename T>
 inline constexpr bool supports_qos2_v = supports_qos2<T>::value;
 
 // ========================================
@@ -206,20 +209,20 @@ inline constexpr bool supports_qos2_v = supports_qos2<T>::value;
  * }
  * @endcode
  */
-template <typename T, typename = void>
+template<typename T, typename = void>
 struct has_reconnection_control : std::false_type
 {
 };
 
-template <typename T>
-struct has_reconnection_control<T,
-                                std::void_t<decltype(std::declval<T>().reconnect()),
-                                            decltype(std::declval<T>().setReconnectEnabled(std::declval<bool>()))>>
-    : std::true_type
+template<typename T>
+struct has_reconnection_control<
+    T,
+    std::void_t<decltype(std::declval<T>().reconnect()),
+                decltype(std::declval<T>().setReconnectEnabled(std::declval<bool>()))>> : std::true_type
 {
 };
 
-template <typename T>
+template<typename T>
 inline constexpr bool has_reconnection_control_v = has_reconnection_control<T>::value;
 
 // ========================================
@@ -238,18 +241,19 @@ inline constexpr bool has_reconnection_control_v = has_reconnection_control<T>::
  * }
  * @endcode
  */
-template <typename T, typename = void>
+template<typename T, typename = void>
 struct has_budget_management : std::false_type
 {
 };
 
-template <typename T>
-struct has_budget_management<T, std::void_t<decltype(std::declval<T>().setBudgetEnabled(std::declval<bool>()))>>
+template<typename T>
+struct has_budget_management<T,
+                             std::void_t<decltype(std::declval<T>().setBudgetEnabled(std::declval<bool>()))>>
     : std::true_type
 {
 };
 
-template <typename T>
+template<typename T>
 inline constexpr bool has_budget_management_v = has_budget_management<T>::value;
 
 // ========================================
@@ -265,7 +269,7 @@ inline constexpr bool has_budget_management_v = has_budget_management<T>::value;
  *
  * Suitable for: AWS Fleet Provisioning, HTTP-over-MQTT, synchronous RPCs
  */
-template <typename T>
+template<typename T>
 inline constexpr bool is_synchronous_capable_v = is_mqtt_client_v<T> && has_manual_processing_v<T>;
 
 /**
@@ -276,7 +280,7 @@ inline constexpr bool is_synchronous_capable_v = is_mqtt_client_v<T> && has_manu
  *
  * All MQTT clients support this (callback-based operation)
  */
-template <typename T>
+template<typename T>
 inline constexpr bool is_asynchronous_capable_v = is_mqtt_client_v<T>;
 
 /**
@@ -287,9 +291,9 @@ inline constexpr bool is_asynchronous_capable_v = is_mqtt_client_v<T>;
  * - Statistics
  * - Budget management or reconnection control
  */
-template <typename T>
-inline constexpr bool is_production_ready_v =
-    is_mqtt_client_v<T> && has_statistics_v<T> && (has_budget_management_v<T> || has_reconnection_control_v<T>);
+template<typename T>
+inline constexpr bool is_production_ready_v = is_mqtt_client_v<T> && has_statistics_v<T> &&
+                                              (has_budget_management_v<T> || has_reconnection_control_v<T>);
 
 // ========================================
 // Utility: Compile-Time Capability Report
@@ -304,13 +308,14 @@ inline constexpr bool is_production_ready_v =
  * // Compilation will show all detected capabilities in error message
  * @endcode
  */
-template <typename T>
+template<typename T>
 constexpr bool report_capabilities()
 {
     static_assert(is_mqtt_client_v<T>, "Type is not a valid MQTT client");
 
     // The compiler will show which static_asserts pass/fail
-    static_assert(!has_manual_processing_v<T> || has_manual_processing_v<T>, "Manual processing: available/unavailable");
+    static_assert(!has_manual_processing_v<T> || has_manual_processing_v<T>,
+                  "Manual processing: available/unavailable");
     static_assert(!has_statistics_v<T> || has_statistics_v<T>, "Statistics: available/unavailable");
     static_assert(!supports_qos2_v<T> || supports_qos2_v<T>, "QoS 2: supported/unsupported");
     static_assert(!has_reconnection_control_v<T> || has_reconnection_control_v<T>,

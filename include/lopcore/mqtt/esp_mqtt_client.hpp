@@ -78,8 +78,7 @@ public:
     esp_err_t
     publish(const std::string &topic, const std::vector<uint8_t> &payload, MqttQos qos, bool retain);
 
-    esp_err_t
-    publishString(const std::string &topic, const std::string &payload, MqttQos qos, bool retain);
+    esp_err_t publishString(const std::string &topic, const std::string &payload, MqttQos qos, bool retain);
 
     esp_err_t subscribe(const std::string &topic, MessageCallback callback, MqttQos qos);
 
@@ -88,10 +87,8 @@ public:
     void setConnectionCallback(ConnectionCallback callback);
     void setErrorCallback(ErrorCallback callback);
 
-    esp_err_t setWillMessage(const std::string &topic,
-                             const std::vector<uint8_t> &payload,
-                             MqttQos qos,
-                             bool retain);
+    esp_err_t
+    setWillMessage(const std::string &topic, const std::vector<uint8_t> &payload, MqttQos qos, bool retain);
 
     MqttStatistics getStatistics() const;
     void resetStatistics();

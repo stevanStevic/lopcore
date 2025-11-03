@@ -381,7 +381,8 @@ private:
     MqttStatistics statistics_;                                 ///< Statistics
     mutable std::mutex mutex_;                                  ///< Thread safety
     TaskHandle_t processTask_;                                  ///< Process loop task handle
-    std::atomic<bool> shouldRun_;                               ///< Process loop control
+    std::atomic<bool> shouldRun_;                               ///< Process loop control (atomic, no mutex needed)
+    SemaphoreHandle_t taskStoppedSemaphore_;                    ///< Signals when task has stopped
 };
 
 } // namespace mqtt

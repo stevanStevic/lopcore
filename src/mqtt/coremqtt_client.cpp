@@ -28,8 +28,17 @@ namespace mqtt
 CoreMqttClient::CoreMqttClient(const MqttConfig &config,
                                std::shared_ptr<lopcore::tls::ITlsTransport> transport)
     : config_(config), mqttContext_{}, transport_{}, networkContext_{}, tlsTransport_(transport),
-      budget_(nullptr), state_(MqttConnectionState::DISCONNECTED), processTask_(nullptr), shouldRun_(false)
+      budget_(nullptr), state_(MqttConnectionState::DISCONNECTED), processTask_(nullptr), shouldRun_(false),
+      taskStoppedSemaphore_(nullptr)
 {
+    // Create semaphore for task synchronization
+    taskStoppedSemaphore_ = xSemaphoreCreateBinary();
+    if (taskStoppedSemaphore_ == nullptr)
+    {
+        LOPCORE_LOGE(TAG, "Failed to create task synchronization semaphore");
+        return;
+    }
+
     // Validate configuration
     esp_err_t err = config_.validate();
     if (err != ESP_OK)
@@ -107,6 +116,13 @@ CoreMqttClient::CoreMqttClient(const MqttConfig &config,
 CoreMqttClient::~CoreMqttClient()
 {
     disconnect();
+
+    // Clean up semaphore
+    if (taskStoppedSemaphore_ != nullptr)
+    {
+        vSemaphoreDelete(taskStoppedSemaphore_);
+        taskStoppedSemaphore_ = nullptr;
+    }
 
     // TLS transport cleanup happens automatically via unique_ptr destructor
 
@@ -843,27 +859,31 @@ esp_err_t CoreMqttClient::stopProcessLoopTask()
 
     LOPCORE_LOGI(TAG, "Stopping ProcessLoop task...");
 
-    // Signal task to stop
+    // Signal task to stop (atomic - no mutex needed)
     shouldRun_ = false;
 
-    // Give task time to exit gracefully (up to 500ms)
-    for (int i = 0; i < 50 && processTask_ != nullptr; i++)
+    // Wait for task to signal completion via semaphore
+    // Task will exit its loop and give the semaphore before deleting itself
+    // Max wait time: processLoop timeout + delay + some overhead
+    const uint32_t maxWaitMs = config_.processLoopTimeoutMs + config_.processLoopDelayMs + 100;
+    const TickType_t maxWaitTicks = pdMS_TO_TICKS(maxWaitMs);
+    
+    if (xSemaphoreTake(taskStoppedSemaphore_, maxWaitTicks) == pdTRUE)
     {
-        vTaskDelay(pdMS_TO_TICKS(10));
+        LOPCORE_LOGI(TAG, "ProcessLoop task stopped gracefully");
+        processTask_ = nullptr;
     }
-
-    // Force delete if still running
-    if (processTask_ != nullptr)
+    else
     {
+        // Timeout - task didn't signal completion
+        LOPCORE_LOGE(TAG, "ProcessLoop task did not stop within timeout!");
         LOPCORE_LOGW(TAG, "Force deleting ProcessLoop task");
         vTaskDelete(processTask_);
         processTask_ = nullptr;
     }
 
-    LOPCORE_LOGI(TAG, "ProcessLoop task stopped");
     return ESP_OK;
 }
-
 bool CoreMqttClient::isProcessLoopTaskRunning() const
 {
     return processTask_ != nullptr;
@@ -902,8 +922,16 @@ void CoreMqttClient::processLoopTask()
     LOPCORE_LOGI(TAG, "ProcessLoop task started (timeout: %lu ms, delay: %lu ms)",
                  config_.processLoopTimeoutMs, config_.processLoopDelayMs);
 
-    while (shouldRun_ && state_ == MqttConnectionState::CONNECTED)
+    // Main processing loop - check shouldRun_ at the start of each iteration
+    while (shouldRun_)
     {
+        // Check connection state
+        if (state_ != MqttConnectionState::CONNECTED)
+        {
+            LOPCORE_LOGW(TAG, "Connection lost in ProcessLoop");
+            break;
+        }
+
         // Call processLoop with configured timeout
         esp_err_t err = processLoop(config_.processLoopTimeoutMs);
 
@@ -927,8 +955,12 @@ void CoreMqttClient::processLoopTask()
         vTaskDelay(pdMS_TO_TICKS(config_.processLoopDelayMs));
     }
 
-    LOPCORE_LOGI(TAG, "ProcessLoop task stopped");
-    processTask_ = nullptr;
+    LOPCORE_LOGI(TAG, "ProcessLoop task exiting gracefully");
+    
+    // Signal that we've stopped (give semaphore before deleting ourselves)
+    xSemaphoreGive(taskStoppedSemaphore_);
+    
+    // Delete ourselves
     vTaskDelete(nullptr);
 }
 

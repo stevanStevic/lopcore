@@ -61,6 +61,7 @@ set(LOPCORE_INCLUDES
 # Component Requirements
 # =============================================================================
 
+# Base requirements (always needed)
 set(LOPCORE_REQUIRES
     nvs_flash
     spiffs
@@ -69,10 +70,38 @@ set(LOPCORE_REQUIRES
     mqtt          # ESP-IDF native MQTT (for EspMqttClient)
     mbedtls
     json
-    coreMQTT      # AWS IoT coreMQTT library
-    corePKCS11    # PKCS#11 for TLS
+    # Note: coreMQTT and corePKCS11 are optional and added dynamically
+    # if esp-aws-iot is available (see below)
     # bt          # Optional: for BLE provisioning
 )
+
+# =============================================================================
+# esp-aws-iot Detection (BEFORE component registration)
+# =============================================================================
+
+# Detect if esp-aws-iot component libraries are available
+# We need to check this BEFORE idf_component_register to conditionally
+# add coreMQTT/corePKCS11 to requirements
+idf_build_get_property(build_components BUILD_COMPONENTS)
+
+# Check for coreMQTT (indicates esp-aws-iot is available)
+set(ESP_AWS_IOT_AVAILABLE FALSE)
+
+if("coreMQTT" IN_LIST build_components OR "corePKCS11" IN_LIST build_components)
+    set(ESP_AWS_IOT_AVAILABLE TRUE)
+    message(STATUS "LopCore: esp-aws-iot available, adding coreMQTT/corePKCS11 to requirements")
+    list(APPEND LOPCORE_REQUIRES coreMQTT corePKCS11)
+else()
+    message(STATUS "LopCore: esp-aws-iot NOT available, building without CoreMQTT support")
+    # Remove sources that depend on esp-aws-iot libraries
+    list(REMOVE_ITEM LOPCORE_SRCS 
+        "src/mqtt/coremqtt_client.cpp"
+        "src/tls/pkcs11_provider.cpp"
+        "src/tls/pkcs11_session.cpp"
+        "src/tls/mbedtls_transport.cpp"
+        "src/tls/c_wrappers/mbedtls_pkcs11_posix.c"
+    )
+endif()
 
 # =============================================================================
 # Component Registration
@@ -88,20 +117,11 @@ idf_component_register(
 # esp-aws-iot Integration (for CoreMQTT and PKCS#11)
 # =============================================================================
 
-# Detect if esp-aws-iot component libraries are available
-# The lopcore Kconfig file uses 'rsource' to include configuration options
-# from esp-aws-iot libraries, making them visible in menuconfig.
-idf_build_get_property(build_components BUILD_COMPONENTS)
-
-# Check for coreMQTT (indicates esp-aws-iot is available)
-set(ESP_AWS_IOT_FOUND FALSE)
-set(ESP_AWS_IOT_PATH "")
-
-if("coreMQTT" IN_LIST build_components OR "corePKCS11" IN_LIST build_components)
-    set(ESP_AWS_IOT_FOUND TRUE)
-    message(STATUS "LopCore: Found esp-aws-iot libraries (coreMQTT/corePKCS11)")
-
+# Only configure esp-aws-iot if it's available
+if(ESP_AWS_IOT_AVAILABLE)
     # Find the esp-aws-iot base path
+    set(ESP_AWS_IOT_PATH "")
+    
     # Try common locations
     if(EXISTS "${CMAKE_SOURCE_DIR}/components/esp-aws-iot")
         set(ESP_AWS_IOT_PATH "${CMAKE_SOURCE_DIR}/components/esp-aws-iot")
@@ -109,49 +129,46 @@ if("coreMQTT" IN_LIST build_components OR "corePKCS11" IN_LIST build_components)
         set(ESP_AWS_IOT_PATH "${LOPCORE_DIR}/../esp-aws-iot")
     elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../esp-aws-iot")
         set(ESP_AWS_IOT_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../esp-aws-iot")
-    endif()
-endif()
-
-if(NOT ESP_AWS_IOT_FOUND OR NOT ESP_AWS_IOT_PATH)
-    # Try lopcore's own components directory (for standalone builds)
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/components/esp-aws-iot")
-        set(ESP_AWS_IOT_FOUND TRUE)
+    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/components/esp-aws-iot")
         set(ESP_AWS_IOT_PATH "${CMAKE_CURRENT_SOURCE_DIR}/components/esp-aws-iot")
-        message(STATUS "LopCore: Found esp-aws-iot in standalone components directory")
     endif()
-endif()
 
-if(ESP_AWS_IOT_FOUND AND ESP_AWS_IOT_PATH)
-    message(STATUS "LopCore: esp-aws-iot path: ${ESP_AWS_IOT_PATH}")
+    if(ESP_AWS_IOT_PATH)
+        message(STATUS "LopCore: esp-aws-iot path: ${ESP_AWS_IOT_PATH}")
 
-    # Add coreMQTT sources from esp-aws-iot
-    target_sources(${COMPONENT_LIB} PRIVATE
-        "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/coreMQTT/source/core_mqtt.c"
-        "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/coreMQTT/source/core_mqtt_state.c"
-        "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/coreMQTT/source/core_mqtt_serializer.c"
-    )
+        # Add coreMQTT sources from esp-aws-iot
+        target_sources(${COMPONENT_LIB} PRIVATE
+            "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/coreMQTT/source/core_mqtt.c"
+            "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/coreMQTT/source/core_mqtt_state.c"
+            "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/coreMQTT/source/core_mqtt_serializer.c"
+        )
 
-    # Add esp-aws-iot include directories for coreMQTT and corePKCS11
-    target_include_directories(${COMPONENT_LIB} PRIVATE
-        "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/coreMQTT/source/include"
-        "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/coreMQTT/source/interface"
-        "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/config"  # Add config directory for core_mqtt_config.h
-        "${ESP_AWS_IOT_PATH}/libraries/corePKCS11/corePKCS11/source/include"
-        "${ESP_AWS_IOT_PATH}/libraries/corePKCS11/corePKCS11/source/dependency/3rdparty/pkcs11/published/2-40-errata-1"
-        "${ESP_AWS_IOT_PATH}/libraries/corePKCS11/config"
-        "${ESP_AWS_IOT_PATH}/libraries/common/posix_compat"
-        "${ESP_AWS_IOT_PATH}/libraries/backoffAlgorithm/backoffAlgorithm/source/include"
-    )
+        # Add esp-aws-iot include directories for coreMQTT and corePKCS11
+        target_include_directories(${COMPONENT_LIB} PRIVATE
+            "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/coreMQTT/source/include"
+            "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/coreMQTT/source/interface"
+            "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/config"
+            "${ESP_AWS_IOT_PATH}/libraries/corePKCS11/corePKCS11/source/include"
+            "${ESP_AWS_IOT_PATH}/libraries/corePKCS11/corePKCS11/source/dependency/3rdparty/pkcs11/published/2-40-errata-1"
+            "${ESP_AWS_IOT_PATH}/libraries/corePKCS11/config"
+            "${ESP_AWS_IOT_PATH}/libraries/common/posix_compat"
+            "${ESP_AWS_IOT_PATH}/libraries/backoffAlgorithm/backoffAlgorithm/source/include"
+        )
 
-    # Enable CoreMQTT support
-    target_compile_definitions(${COMPONENT_LIB} PUBLIC
-        LOPCORE_COREMQTT_ENABLED=1
-    )
+        # Enable CoreMQTT support
+        target_compile_definitions(${COMPONENT_LIB} PUBLIC
+            LOPCORE_COREMQTT_ENABLED=1
+        )
 
-    message(STATUS "LopCore: CoreMQTT client enabled via esp-aws-iot")
+        message(STATUS "LopCore: CoreMQTT client enabled via esp-aws-iot")
+    else()
+        message(WARNING "LopCore: esp-aws-iot path not found. CoreMQTT disabled.")
+        target_compile_definitions(${COMPONENT_LIB} PUBLIC
+            LOPCORE_COREMQTT_ENABLED=0
+        )
+    endif()
 else()
-    message(WARNING "LopCore: esp-aws-iot NOT found. CoreMQTT client will be disabled. Only ESP-MQTT available.")
-    message(WARNING "  To enable CoreMQTT: Add esp-aws-iot to your project's components/")
+    message(STATUS "LopCore: Building without CoreMQTT support (esp-aws-iot not available)")
     target_compile_definitions(${COMPONENT_LIB} PUBLIC
         LOPCORE_COREMQTT_ENABLED=0
     )

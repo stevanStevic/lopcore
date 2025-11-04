@@ -2,7 +2,11 @@
  * @file esp_mqtt_client.cpp
  * @brief Implementation of ESP-MQTT client wrapper
  *
- * @copyright Copyright (c) 2025
+ * Wraps ESP-IDF's mqtt_client library with C++ abstractions and
+ * integrates with LopCore logging and configuration systems.
+ *
+ * @copyright Copyright (c) 2025 LopCore Contributors
+ * @license MIT License
  */
 
 #include "lopcore/mqtt/esp_mqtt_client.hpp"

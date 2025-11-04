@@ -2,7 +2,11 @@
  * @file file_sink.cpp
  * @brief File logging sink implementation
  *
- * Week 2 - Logging System
+ * Provides file-based logging with rotation, buffering, and
+ * configurable size limits.
+ *
+ * @copyright Copyright (c) 2025 LopCore Contributors
+ * @license MIT License
  */
 
 #include "lopcore/logging/file_sink.hpp"

@@ -9,7 +9,8 @@
  * - Encrypted sensitive data
  * - Fast read/write operations
  *
- * @copyright Copyright (c) 2025
+ * @copyright Copyright (c) 2025 LopCore Contributors
+ * @license MIT License
  */
 
 #pragma once

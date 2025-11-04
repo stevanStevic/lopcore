@@ -4,17 +4,19 @@ This directory contains example applications demonstrating LopCore middleware fe
 
 ## Available Examples
 
-| Example                                     | Description                                          | Components Used              |
-| ------------------------------------------- | ---------------------------------------------------- | ---------------------------- |
-| [01_basic_logging](01_basic_logging/)       | Console logging with different log levels            | Logger, ConsoleSink          |
-| [02_storage_basics](02_storage_basics/)     | NVS and SPIFFS storage operations                    | StorageFactory, NVS, SPIFFS  |
-| [03_state_machine](03_state_machine/)       | Type-safe hierarchical state machine                 | StateMachine, IState         |
+| Example                                                     | Description                                          | Components Used                     |
+| ----------------------------------------------------------- | ---------------------------------------------------- | ----------------------------------- |
+| [01_basic_logging](01_basic_logging/)                       | Console logging with different log levels            | Logger, ConsoleSink                 |
+| [02_storage_basics](02_storage_basics/)                     | NVS and SPIFFS storage operations                    | StorageFactory, NVS, SPIFFS         |
+| [03_state_machine](03_state_machine/)                       | Type-safe hierarchical state machine                 | StateMachine, IState                |
+| [04_mqtt_esp_client](04_mqtt_esp_client/)                   | ESP-MQTT client with subscriptions and publishing    | EspMqttClient                       |
+| [05_mqtt_coremqtt_async](05_mqtt_coremqtt_async/)           | CoreMQTT async mode with AWS IoT Device Shadow       | CoreMqttClient, TLS, PKCS#11        |
+| [06_mqtt_coremqtt_sync](06_mqtt_coremqtt_sync/)             | CoreMQTT manual mode for Fleet Provisioning pattern  | CoreMqttClient, TLS, PKCS#11        |
 
 ### Coming Soon
 
--   MQTT client examples (basic and AWS IoT Core)
--   TLS with PKCS#11 certificates
 -   Full application combining multiple components
+-   Advanced state machine patterns
 
 ## How to Use Examples
 
@@ -63,6 +65,18 @@ Each example is a complete ESP-IDF project with:
 1. **01_basic_logging** - Start here to understand logging basics
 2. **02_storage_basics** - Learn persistent storage (NVS + SPIFFS)
 3. **03_state_machine** - Build type-safe state machines for complex logic
+4. **04_mqtt_esp_client** - Simple MQTT with ESP-MQTT (standard brokers)
+5. **05_mqtt_coremqtt_async** - AWS IoT with CoreMQTT async mode
+6. **06_mqtt_coremqtt_sync** - Fleet Provisioning with CoreMQTT manual mode
+
+### MQTT Client Selection
+
+Not sure which MQTT example to use? See [MQTT Client Selection Guide](../docs/MQTT_CLIENTS.md).
+
+**Quick decision:**
+- **Standard MQTT broker** (Mosquitto, HiveMQ, etc.) → Use example 04 (ESP-MQTT)
+- **AWS IoT Core** with Device Shadow/Jobs → Use example 05 (CoreMQTT async)
+- **AWS IoT Fleet Provisioning** → Use example 06 (CoreMQTT sync)
 
 ## Common Patterns
 
@@ -71,7 +85,11 @@ Each example is a complete ESP-IDF project with:
 ```cpp
 #include "lopcore/logging/logger.hpp"
 #include "lopcore/storage/storage_factory.hpp"
-#include "lopcore/mqtt/mqtt_client_factory.hpp"
+#include "lopcore/mqtt/mqtt_factory.hpp"
+#include "lopcore/mqtt/esp_mqtt_client.hpp"
+#include "lopcore/mqtt/coremqtt_client.hpp"
+#include "lopcore/tls/tls_transport.hpp"
+#include "lopcore/tls/pkcs11_provider.hpp"
 #include "lopcore/state_machine/state_machine.hpp"
 ```
 
@@ -85,9 +103,24 @@ logger.addSink(std::make_unique<lopcore::ConsoleSink>());
 // Storage
 auto storage = lopcore::StorageFactory::createNvs("config");
 
-// MQTT
-auto mqtt = lopcore::mqtt::MqttClientFactory::create(
-    lopcore::mqtt::MqttClientType::AUTO, config);
+// MQTT (ESP-MQTT for standard brokers)
+auto espMqttConfig = lopcore::mqtt::MqttConfig::builder()
+    .broker("mqtt://test.mosquitto.org:1883")
+    .clientId("my-device")
+    .build();
+auto espMqtt = std::make_unique<lopcore::mqtt::EspMqttClient>(espMqttConfig);
+
+// MQTT (CoreMQTT for AWS IoT)
+auto tlsTransport = std::make_shared<lopcore::tls::MbedtlsTransport>();
+tlsTransport->connect(tlsConfig);
+
+auto coreMqttConfig = lopcore::mqtt::MqttConfig::builder()
+    .broker(awsEndpoint)
+    .clientId("my-device")
+    .autoStartProcessLoop(true)  // Async mode
+    .build();
+auto coreMqtt = std::make_unique<lopcore::mqtt::CoreMqttClient>(
+    coreMqttConfig, tlsTransport);
 
 // State Machine
 enum class MyState { INIT, RUNNING, STOPPED };

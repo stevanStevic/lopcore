@@ -4,6 +4,9 @@
  *
  * Provides a type-safe configuration structure and fluent builder API
  * for TLS connection parameters.
+ *
+ * @copyright Copyright (c) 2025 LopCore Contributors
+ * @license MIT License
  */
 
 #pragma once

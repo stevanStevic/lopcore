@@ -1,8 +1,12 @@
 /**
  * @file logger.cpp
- * @brief Logger implementation
+ * @brief Logger implementation with multi-sink support
  *
- * Week 2 - Logging System
+ * Provides flexible logging system with configurable log levels,
+ * multiple output sinks, and platform-agnostic timestamping.
+ *
+ * @copyright Copyright (c) 2025 LopCore Contributors
+ * @license MIT License
  */
 
 #include "lopcore/logging/logger.hpp"

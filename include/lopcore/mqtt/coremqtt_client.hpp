@@ -13,7 +13,8 @@
  * Use this implementation for AWS IoT Core connectivity where stateful
  * QoS tracking and explicit state machine control are required.
  *
- * @copyright Copyright (c) 2025
+ * @copyright Copyright (c) 2025 LopCore Contributors
+ * @license MIT License
  */
 
 #ifndef LOPCORE_MQTT_COREMQTT_CLIENT_HPP

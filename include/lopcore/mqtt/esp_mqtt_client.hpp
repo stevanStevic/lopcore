@@ -5,7 +5,8 @@
  * Wraps ESP-MQTT library as a standalone component for type safety,
  * testability, and modern C++ patterns.
  *
- * @copyright Copyright (c) 2025
+ * @copyright Copyright (c) 2025 LopCore Contributors
+ * @license MIT License
  */
 
 #pragma once

@@ -2,7 +2,11 @@
  * @file coremqtt_client.cpp
  * @brief Implementation of coreMQTT client wrapper
  *
- * @copyright Copyright (c) 2025
+ * Wraps AWS IoT coreMQTT library with C++ RAII patterns and integrates
+ * with LopCore logging, configuration, and TLS transport.
+ *
+ * @copyright Copyright (c) 2025 LopCore Contributors
+ * @license MIT License
  */
 
 #include "lopcore/mqtt/coremqtt_client.hpp"

@@ -1,6 +1,12 @@
 /**
  * @file pkcs11_session.cpp
  * @brief Implementation of PKCS#11 session wrapper
+ *
+ * Provides RAII wrapper for PKCS#11 session lifecycle management.
+ * Ensures proper session initialization and cleanup.
+ *
+ * @copyright Copyright (c) 2025 LopCore Contributors
+ * @license MIT License
  */
 
 #include "lopcore/tls/pkcs11_session.hpp"

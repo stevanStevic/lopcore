@@ -1,6 +1,12 @@
 /**
  * @file spiffs_storage.cpp
- * @brief SPIFFS storage implementation
+ * @brief SPIFFS (SPI Flash File System) storage implementation
+ *
+ * Provides file-based storage using ESP-IDF's SPIFFS library.
+ * Supports both ESP32 platform and host-based testing.
+ *
+ * @copyright Copyright (c) 2025 LopCore Contributors
+ * @license MIT License
  */
 
 #include "lopcore/storage/spiffs_storage.hpp"

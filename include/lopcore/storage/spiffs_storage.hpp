@@ -9,7 +9,8 @@
  * - Certificates and keys
  * - Small to medium sized files (<100KB typically)
  *
- * @copyright Copyright (c) 2025
+ * @copyright Copyright (c) 2025 LopCore Contributors
+ * @license MIT License
  */
 
 #pragma once

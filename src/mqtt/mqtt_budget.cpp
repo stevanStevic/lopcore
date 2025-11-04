@@ -2,7 +2,11 @@
  * @file mqtt_budget.cpp
  * @brief Implementation of MQTT message budgeting
  *
- * @copyright Copyright (c) 2025
+ * Provides message rate limiting and budget management for MQTT operations.
+ * Prevents excessive message publishing and enforces resource constraints.
+ *
+ * @copyright Copyright (c) 2025 LopCore Contributors
+ * @license MIT License
  */
 
 #include "lopcore/mqtt/mqtt_budget.hpp"

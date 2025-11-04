@@ -1,6 +1,12 @@
 /**
  * @file pkcs11_provider.cpp
  * @brief Implementation of PKCS#11 provider singleton
+ *
+ * Manages PKCS#11 cryptographic token initialization and session lifecycle.
+ * Provides thread-safe singleton access to PKCS#11 operations.
+ *
+ * @copyright Copyright (c) 2025 LopCore Contributors
+ * @license MIT License
  */
 
 #include "lopcore/tls/pkcs11_provider.hpp"

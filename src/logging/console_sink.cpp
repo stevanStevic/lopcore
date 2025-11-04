@@ -2,7 +2,11 @@
  * @file console_sink.cpp
  * @brief Console logging sink implementation
  *
- * Week 2 - Logging System
+ * Provides colored console output with configurable formatting.
+ * Supports both ESP-IDF platform and host-based testing.
+ *
+ * @copyright Copyright (c) 2025 LopCore Contributors
+ * @license MIT License
  */
 
 #include "lopcore/logging/console_sink.hpp"

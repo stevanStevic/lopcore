@@ -1,6 +1,12 @@
 /**
  * @file storage_factory.cpp
  * @brief Storage factory implementation
+ *
+ * Creates storage instances based on type (NVS or SPIFFS).
+ * Provides factory pattern for flexible storage backend selection.
+ *
+ * @copyright Copyright (c) 2025 LopCore Contributors
+ * @license MIT License
  */
 
 #include "lopcore/storage/storage_factory.hpp"

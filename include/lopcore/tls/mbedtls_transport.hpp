@@ -1,3 +1,22 @@
+/**
+ * @file mbedtls_transport.hpp
+ * @brief MbedTLS transport with PKCS#11 support
+ *
+ * Concrete implementation of ITlsTransport using MbedTLS and PKCS#11.
+ * Provides secure TLS connections with hardware security module support
+ * for credential management.
+ *
+ * Features:
+ * - PKCS#11 integration for secure credential storage
+ * - Exponential backoff retry logic
+ * - ALPN protocol support
+ * - Server Name Indication (SNI)
+ * - Network context abstraction for coreMQTT integration
+ *
+ * @copyright Copyright (c) 2025 LopCore Contributors
+ * @license MIT License
+ */
+
 #pragma once
 
 #include "lopcore/tls/network_context.h"

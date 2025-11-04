@@ -207,14 +207,16 @@ client->publish("devices/status", payload, MqttQos::AT_LEAST_ONCE);
 
 **Features:**
 
--   **ESP-MQTT**: Lightweight, native ESP-IDF client
--   **CoreMQTT**: AWS IoT optimized (requires esp-aws-iot)
+-   **ESP-MQTT**: Lightweight, native ESP-IDF client (async-only)
+-   **CoreMQTT**: AWS IoT optimized with manual/async modes (requires esp-aws-iot)
 -   Auto-detection based on broker endpoint
--   QoS 0, 1, 2 support
+-   QoS 0, 1, 2 support with stateful tracking (CoreMQTT)
 -   Wildcard subscriptions (`+` and `#`)
 -   Message budgeting (anti-flood)
 -   Auto-reconnect with exponential backoff
 -   Thread-safe operations
+
+**📖 For detailed comparison and selection guide, see [MQTT Client Selection](docs/MQTT_CLIENTS.md)**
 
 ### 🔷 TLS Transport
 
@@ -448,6 +450,14 @@ See [examples/](examples/) for working applications you can flash to real hardwa
 -   **[Header Migration](HEADER_MIGRATION.md)** - API namespace changes
 -   **[Contributing](CONTRIBUTING.md)** - Development guidelines
 -   **[Changelog](CHANGELOG.md)** - Version history
+-   **[Documentation](docs/)** - Comprehensive component guides
+
+### Component Guides
+
+-   **[MQTT Client Selection](docs/MQTT_CLIENTS.md)** - ESP-MQTT vs CoreMQTT comparison, when to use each
+-   **Storage Guide** - Coming soon
+-   **TLS & PKCS#11 Guide** - Coming soon
+-   **State Machine Patterns** - Coming soon
 
 ### API Documentation
 

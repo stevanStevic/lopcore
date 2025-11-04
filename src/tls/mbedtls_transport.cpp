@@ -1,3 +1,14 @@
+/**
+ * @file mbedtls_transport.cpp
+ * @brief MbedTLS transport implementation for TLS connections
+ *
+ * Provides secure TLS transport using MbedTLS with PKCS#11 support.
+ * Implements connection management, certificate handling, and network I/O.
+ *
+ * @copyright Copyright (c) 2025 LopCore Contributors
+ * @license MIT License
+ */
+
 #include "lopcore/tls/mbedtls_transport.hpp"
 
 #include <string.h>

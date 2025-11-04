@@ -95,13 +95,13 @@ extern "C" void app_main(void)
     // - formatIfFailed: auto-format if mount fails (useful for first boot)
     auto spiffsConfig = lopcore::storage::SpiffsConfig()
                             .setBasePath("/spiffs")
-                            .setPartitionLabel("storage")  // Using specific partition
+                            .setPartitionLabel("storage") // Using specific partition
                             .setMaxFiles(5)
                             .setFormatIfFailed(true);
 
     LOPCORE_LOGI(TAG, "Creating SPIFFS storage with full config:");
     LOPCORE_LOGI(TAG, "  Base path: %s", spiffsConfig.basePath.c_str());
-    LOPCORE_LOGI(TAG, "  Partition label: %s", 
+    LOPCORE_LOGI(TAG, "  Partition label: %s",
                  spiffsConfig.partitionLabel.empty() ? "(default)" : spiffsConfig.partitionLabel.c_str());
     LOPCORE_LOGI(TAG, "  Max files: %d", spiffsConfig.maxFiles);
     LOPCORE_LOGI(TAG, "  Format if failed: %s", spiffsConfig.formatIfFailed ? "true" : "false");

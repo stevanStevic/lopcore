@@ -18,13 +18,15 @@ namespace lopcore
  * Different storage backends have different characteristics:
  * - SPIFFS: Good for files, logs, certificates (slow writes, fast reads)
  * - NVS: Good for config, key-value pairs (fast, encrypted, limited size)
- * - SD_CARD: Good for large media files (removable, large capacity)
+ * - SDCARD: Good for large media files (removable, large capacity)
+ * - LITTLEFS: Good for embedded flash storage (wear leveling, power-loss resilient)
  */
 enum class StorageType
 {
-    SPIFFS, ///< SPI Flash File System (internal flash, file-based)
-    NVS,    ///< Non-Volatile Storage (internal flash, key-value store)
-    SD_CARD ///< External SD card (removable, file-based)
+    SPIFFS,   ///< SPI Flash File System (internal flash, file-based)
+    NVS,      ///< Non-Volatile Storage (internal flash, key-value store)
+    SDCARD,   ///< External SD card (removable, file-based, FAT)
+    LITTLEFS, ///< LittleFS (internal flash, file-based, power-loss resilient)
 };
 
 } // namespace lopcore

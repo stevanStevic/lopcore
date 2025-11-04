@@ -1,0 +1,733 @@
+# CoreMQTT Sync Example - Manual Processing
+
+This example demonstrates CoreMQTT in **manual/synchronous mode** for deterministic request-response patterns and controlled message processing.
+
+
+
+## Overview## Overview
+
+
+
+Shows how to use CoreMQTT in **manual mode** with explicit `processLoop()` calls for fine-grained control over message processing. Perfect for implementing request-response patterns and synchronous workflows.Unlike async mode with a background task, manual mode gives your application **explicit control** over when MQTT events are processed. This enables:
+
+
+
+## Features- **Synchronous request-response** patterns (subscribe → publish → wait)
+
+- **Deterministic message ordering**
+
+- **Manual processing** - explicit control with `processLoop()`- **Controlled state transitions** (critical for provisioning)
+
+- **Request-response** transactions- **No race conditions** between publish and response handling
+
+- **TLS encryption** for secure communication
+
+- **Synchronous workflows** - wait for responses## Why Manual Mode?
+
+- **Helper functions** for common patterns
+
+### Fleet Provisioning Pattern
+
+## Prerequisites
+
+AWS IoT Fleet Provisioning requires this exact sequence:
+
+- ESP32 connected to WiFi
+
+- TLS-enabled MQTT broker```
+
+- Understanding of MQTT pub/sub model1. Subscribe to "/accepted" and "/rejected" response topics
+
+2. Wait for SUBACK
+
+The example uses `test.mosquitto.org:8883` by default.3. Publish request to "/publish" topic
+
+4. Wait for PUBACK  
+
+## Configuration5. Process response on "/accepted" or "/rejected"
+
+6. Continue only after response received
+
+Edit `main/main.cpp`:```
+
+
+
+```cppWith **async mode**, responses might arrive before you're ready. With **manual mode**, you control exactly when messages are processed by calling `processLoop()`.
+
+const char *brokerHost = "test.mosquitto.org";
+
+const uint16_t brokerPort = 8883;## Features
+
+const char *requestTopic = "lopcore/rpc/request";
+
+const char *responseTopic = "lopcore/rpc/response";- Manual `processLoop()` control (no background task)
+
+```- Synchronous request-response helpers
+
+- Response state management
+
+## Building- Timeout handling
+
+- Fleet Provisioning pattern demonstration
+
+```bash
+
+cd examples/06_mqtt_coremqtt_sync## Prerequisites
+
+idf.py build
+
+idf.py flash monitorSame as [CoreMQTT Async Example](../05_mqtt_coremqtt_async/):
+
+```
+
+1. AWS IoT Thing created
+
+## Expected Output2. Certificates stored in PKCS#11/NVS
+
+3. Amazon Root CA in SPIFFS
+
+```
+
+I (1234) mqtt_coremqtt_sync: ===========================================## Configuration
+
+I (1235) mqtt_coremqtt_sync: CoreMQTT Sync Client Example
+
+I (1236) mqtt_coremqtt_sync: Request-Response Pattern with Manual LoopEdit `main/main.cpp`:
+
+I (1237) mqtt_coremqtt_sync: ===========================================
+
+I (1450) mqtt_coremqtt_sync: ✓ TLS connected```cpp
+
+I (1650) mqtt_coremqtt_sync: ✓ MQTT connectedconst char *awsIotEndpoint = "YOUR_ENDPOINT-ats.iot.us-east-1.amazonaws.com";
+
+I (1651) mqtt_coremqtt_sync: Subscribing to: lopcore/rpc/responseconst char *thingName = "your-thing-name";
+
+I (1652) mqtt_coremqtt_sync: ✓ Subscribed to: lopcore/rpc/response```
+
+I (1750) mqtt_coremqtt_sync: ===========================================
+
+I (1751) mqtt_coremqtt_sync: Starting Request-Response Examples## Building
+
+I (1752) mqtt_coremqtt_sync: ===========================================
+
+I (1753) mqtt_coremqtt_sync: ```bash
+
+I (1754) mqtt_coremqtt_sync: --- Example 1: Ping Request ---cd examples/06_mqtt_coremqtt_sync
+
+I (1755) mqtt_coremqtt_sync: Publishing to lopcore/rpc/request: pingidf.py build
+
+I (1850) mqtt_coremqtt_sync: Waiting for response (timeout: 10000 ms)...```
+
+I (2100) mqtt_coremqtt_sync: 📬 Response received: pong
+
+I (2101) mqtt_coremqtt_sync: ✓ Transaction complete: pong## Running
+
+```
+
+```bash
+
+## What the Example Doesidf.py flash monitor
+
+```
+
+### Initialization
+
+1. Sets up TLS transport with certificates## Expected Output
+
+2. Creates CoreMQTT client
+
+3. Connects with manual CONNACK processing```
+
+4. Subscribes to request and response topicsI (1234) coremqtt_sync: ===========================================
+
+I (1235) coremqtt_sync: CoreMQTT Manual/Sync Example
+
+### Request-Response ExamplesI (1236) coremqtt_sync: ===========================================
+
+Demonstrates three transactions:I (1237) coremqtt_sync: Setting up TLS transport...
+
+I (1240) coremqtt_sync: ✓ TLS connection established
+
+1. **Ping Request**I (1241) coremqtt_sync: Creating CoreMQTT client in manual mode...
+
+   - Publishes "ping" to request topicI (1242) coremqtt_sync: ✓ MQTT connected - Manual mode (no background task)
+
+   - Waits for response with processLoopI (1243) coremqtt_sync: Application controls when to process messages via processLoop()
+
+   - Logs response when receivedI (1244) coremqtt_sync: === Starting Request-Response Transaction ===
+
+I (1245) coremqtt_sync: Subscribing to: test/response
+
+2. **Echo Request**I (1246) coremqtt_sync: ✓ Subscription confirmed: test/response
+
+   - Sends "echo:Hello from CoreMQTT!"I (1247) coremqtt_sync: Publishing to: test/request
+
+   - Demonstrates string payload handlingI (1248) coremqtt_sync: ✓ Publish acknowledged
+
+   - Confirms round-trip communicationI (1249) coremqtt_sync: Waiting for response (timeout: 10000 ms)...
+
+I (1250) coremqtt_sync: Message received on topic: test/response
+
+3. **Info Request**I (1251) coremqtt_sync: ✓ Response received after 200 ms
+
+   - Requests device informationI (1252) coremqtt_sync: === Request-Response Transaction Complete ===
+
+   - Shows structured request handling```
+
+   - Validates response format
+
+## Code Structure
+
+### Periodic Status
+
+After examples, enters periodic publishing loop:### 1. Create Client (Manual Mode)
+
+- Sends status every 15 seconds
+
+- Shows counter, uptime, heap memory```cpp
+
+- Continues processing messagesauto mqttConfig = lopcore::mqtt::MqttConfig::builder()
+
+- Displays statistics    .broker(awsIotEndpoint)
+
+    .clientId(thingName)
+
+## Testing    .autoStartProcessLoop(false)  // MANUAL MODE - No background task
+
+    .build();
+
+### Simulate Response Server
+
+auto mqttClient = std::make_unique<lopcore::mqtt::CoreMqttClient>(
+
+Create a simple MQTT client that responds to requests:    mqttConfig, tlsTransport);
+
+
+
+```pythonmqttClient->connect();
+
+import paho.mqtt.client as mqtt// No background task started - you must call processLoop() manually
+
+```
+
+def on_message(client, userdata, msg):
+
+    request = msg.payload.decode()### 2. Subscribe with Processing
+
+    print(f"Request: {request}")
+
+    ```cpp
+
+    if request == "ping":bool subscribeWithProcessing(const char *topic, uint32_t timeoutMs) {
+
+        client.publish("lopcore/rpc/response", "pong")    // Send subscribe request
+
+    elif request.startswith("echo:"):    g_mqttClient->subscribe(topic, onMessageReceived, MqttQos::AT_LEAST_ONCE);
+
+        client.publish("lopcore/rpc/response", request[5:])    
+
+    elif request == "info":    // Process events until SUBACK received
+
+        client.publish("lopcore/rpc/response", '{"device":"test","version":"1.0"}')    uint32_t elapsed = 0;
+
+    while (elapsed < timeoutMs) {
+
+client = mqtt.Client()        g_mqttClient->processLoop();  // Handle incoming packets
+
+client.tls_set("/etc/ssl/certs/ca-certificates.crt")        
+
+client.on_message = on_message        if (g_mqttClient->isSubscribed(topic)) {
+
+client.connect("test.mosquitto.org", 8883, 60)            return true;  // SUBACK received
+
+client.subscribe("lopcore/rpc/request")        }
+
+client.loop_forever()        
+
+```        vTaskDelay(pdMS_TO_TICKS(200));
+
+        elapsed += 200;
+
+### Monitor Traffic    }
+
+    
+
+```bash    return false;  // Timeout
+
+# Watch requests}
+
+mosquitto_sub -h test.mosquitto.org -p 8883 \```
+
+    --cafile /etc/ssl/certs/ca-certificates.crt \
+
+    -t "lopcore/rpc/request" -v**Why?** The SUBACK packet arrives asynchronously. We must call `processLoop()` to receive and handle it.
+
+
+
+# Watch responses  ### 3. Publish with Processing
+
+mosquitto_sub -h test.mosquitto.org -p 8883 \
+
+    --cafile /etc/ssl/certs/ca-certificates.crt \```cpp
+
+    -t "lopcore/rpc/response" -vbool publishWithProcessing(const char *topic, const char *payload) {
+
+```    // Send publish request
+
+    g_mqttClient->publishString(topic, payload, MqttQos::AT_LEAST_ONCE, false);
+
+## Code Structure    
+
+    // Process until PUBACK received
+
+### Helper Functions    g_mqttClient->processLoop();
+
+    
+
+#### Subscribe with Processing    return true;
+
+```cpp}
+
+esp_err_t subscribeWithProcessing(```
+
+    CoreMqttClient *client,
+
+    const char *topic,**Why?** For QoS 1 publishes, we need to receive the PUBACK acknowledgment.
+
+    MessageCallback callback,
+
+    uint32_t timeoutMs = 5000)### 4. Wait for Response
+
+{
+
+    client->subscribe(topic, callback, MqttQos::AT_LEAST_ONCE);```cpp
+
+    bool waitForResponse(uint32_t timeoutMs) {
+
+    // Process SUBACK manually    uint32_t elapsed = 0;
+
+    TickType_t start = xTaskGetTickCount();    
+
+    while ((xTaskGetTickCount() - start) < pdMS_TO_TICKS(timeoutMs)) {    while (elapsed < timeoutMs) {
+
+        client->processLoop(std::chrono::milliseconds(200));        // Process incoming messages
+
+        vTaskDelay(pdMS_TO_TICKS(100));        g_mqttClient->processLoop();
+
+    }        
+
+    return ESP_OK;        // Check if response arrived (set by callback)
+
+}        if (responseState.received) {
+
+```            return true;
+
+        }
+
+#### Publish with Processing        
+
+```cpp        vTaskDelay(pdMS_TO_TICKS(200));
+
+esp_err_t publishWithProcessing(        elapsed += 200;
+
+    CoreMqttClient *client,    }
+
+    const char *topic,    
+
+    const char *message,    return false;  // Timeout
+
+    uint32_t timeoutMs = 3000)}
+
+{```
+
+    client->publishString(topic, message, MqttQos::AT_LEAST_ONCE, false);
+
+    **Why?** Messages only arrive when we call `processLoop()`. This gives us deterministic control.
+
+    // Process PUBACK manually
+
+    TickType_t start = xTaskGetTickCount();### 5. Request-Response Transaction
+
+    while ((xTaskGetTickCount() - start) < pdMS_TO_TICKS(timeoutMs)) {
+
+        client->processLoop(std::chrono::milliseconds(200));```cpp
+
+        vTaskDelay(pdMS_TO_TICKS(50));bool performRequestResponse() {
+
+    }    // Step 1: Subscribe to response topic
+
+    return ESP_OK;    subscribeWithProcessing(responseTopic);
+
+}    
+
+```    // Step 2: Reset response state (CRITICAL!)
+
+    responseState.reset();
+
+#### Wait for Response    
+
+```cpp    // Step 3: Publish request
+
+bool waitForResponse(    publishWithProcessing(requestTopic, payload);
+
+    CoreMqttClient *client,    
+
+    uint32_t timeoutMs = 10000)    // Step 4: Wait for response
+
+{    waitForResponse(10000);
+
+    TickType_t start = xTaskGetTickCount();    
+
+    while ((xTaskGetTickCount() - start) < pdMS_TO_TICKS(timeoutMs)) {    // Step 5: Process response
+
+        if (g_response.received) {    handleResponse(responseState.payload);
+
+            return true;    
+
+        }    return true;
+
+        client->processLoop(std::chrono::milliseconds(200));}
+
+        vTaskDelay(pdMS_TO_TICKS(100));```
+
+    }
+
+    return false;**Critical:** Reset response state BEFORE publishing to avoid processing stale responses.
+
+}
+
+```## Polling Interval
+
+
+
+### Response TrackingThe example uses **200ms polling**:
+
+
+
+```cpp```cpp
+
+struct ResponseState {const uint32_t pollInterval = 200;  // Matches TLS recv timeout
+
+    bool received = false;```
+
+    std::string payload;
+
+    TickType_t timestamp = 0;**Why 200ms?**
+
+    - Matches TLS socket receive timeout
+
+    void reset() {- Responsive without excessive CPU usage
+
+        received = false;- Suitable for Fleet Provisioning workflows
+
+        payload.clear();
+
+        timestamp = 0;**Can I use different intervals?**
+
+    }- **Faster (50-100ms)**: More responsive, higher CPU
+
+};- **Slower (500-1000ms)**: Lower CPU, slower responses
+
+- **Must match TLS recv timeout** for best results
+
+static ResponseState g_response;
+
+```## Fleet Provisioning Pattern
+
+
+
+**Critical**: Always call `g_response.reset()` before publishing a new request!This example demonstrates the exact pattern used in AWS IoT Fleet Provisioning:
+
+
+
+### Transaction Pattern```cpp
+
+// 1. Subscribe to response topics
+
+```cppsubscribeWithProcessing("$aws/certificates/create/json/accepted");
+
+// 1. Reset response statesubscribeWithProcessing("$aws/certificates/create/json/rejected");
+
+g_response.reset();
+
+// 2. Reset response tracking
+
+// 2. Publish requestprovisioningState.reset();
+
+publishWithProcessing(client, requestTopic, "ping");
+
+// 3. Publish request
+
+// 3. Wait for responsepublishWithProcessing("$aws/certificates/create/json", csrPayload);
+
+if (waitForResponse(client, 10000)) {
+
+    // Process response// 4. Wait for response
+
+    LOPCORE_LOGI(TAG, "Got response: %s", g_response.payload.c_str());waitForResponse(10000);
+
+}
+
+```// 5. Handle response
+
+if (provisioningState.accepted) {
+
+## When to Use Manual Mode    // Extract certificate, continue provisioning
+
+} else {
+
+✅ **Use Manual processLoop() when:**    // Handle rejection
+
+- Implementing request-response patterns}
+
+- Need synchronous workflows```
+
+- Want fine-grained control over timing
+
+- Building state machinesThis is a common pattern for any synchronous MQTT request-response workflow.
+
+- Handling multi-step transactions
+
+## When to Use Manual Mode
+
+❌ **Use Async mode instead for:**
+
+- Simple pub/sub (Example 04, 05)✅ **Use Manual Mode when:**
+
+- Event-driven architectures- Implementing Fleet Provisioning
+
+- High-frequency messaging- Need synchronous request-response
+
+- Fire-and-forget publishing- State machine with strict transitions
+
+- Testing/debugging message flows
+
+## Key Concepts- Require deterministic behavior
+
+
+
+### processLoop()❌ **Don't Use Manual Mode when:**
+
+- Simple pub/sub patterns
+
+Manually processes MQTT messages for a specified duration:- Async event handling is acceptable
+
+- Want automatic background processing
+
+```cpp- Don't need controlled message ordering
+
+// Process for 200ms, returns ESP_OK if successful
+
+client->processLoop(std::chrono::milliseconds(200));## Comparison with Async Mode
+
+```
+
+| Feature | Manual Mode | Async Mode |
+
+Call this:|---------|-------------|------------|
+
+- After connect() to process CONNACK| Background task | ❌ No | ✅ Yes |
+
+- After subscribe() to process SUBACK| ProcessLoop control | ✅ Explicit | ❌ Automatic |
+
+- After publish() to process PUBACK (QoS 1/2)| Message timing | ✅ Deterministic | ❌ Async |
+
+- While waiting for incoming messages| Request-response | ✅ Natural | ⚠️ Complex |
+
+- Periodically to maintain keepalive| CPU usage | ✅ Lower (on-demand) | ⚠️ Higher (continuous) |
+
+| Use case | Provisioning, state machines | General pub/sub |
+
+### Timeouts
+
+## Common Pitfalls
+
+All helper functions use timeouts to prevent infinite waiting:
+
+- **subscribeWithProcessing**: 5 seconds### 1. Forgetting to Reset State
+
+- **publishWithProcessing**: 3 seconds  
+
+- **waitForResponse**: 10 seconds❌ **Wrong:**
+
+```cpp
+
+Adjust based on network conditions and broker response times.publishWithProcessing(requestTopic, payload);
+
+responseState.reset();  // TOO LATE!
+
+### Response State ManagementwaitForResponse();
+
+```
+
+**Always reset state before new request**:
+
+```cpp✅ **Correct:**
+
+g_response.reset();  // Clear previous response```cpp
+
+publishWithProcessing(...);  // Send new requestresponseState.reset();  // Reset BEFORE publish
+
+waitForResponse(...);  // Wait for new responsepublishWithProcessing(requestTopic, payload);
+
+```waitForResponse();
+
+```
+
+Forgetting to reset can cause stale responses to be used!
+
+### 2. Not Calling processLoop()
+
+## Troubleshooting
+
+❌ **Wrong:**
+
+### Responses Not Received```cpp
+
+mqttClient->publish(topic, payload);
+
+1. **Check response state is reset**:// Response will never arrive - no processLoop()!
+
+   ```cppif (responseState.received) { ... }
+
+   g_response.reset();  // Before each request!```
+
+   ```
+
+✅ **Correct:**
+
+2. **Verify subscription succeeded**:```cpp
+
+   - Check logs for "✓ Subscribed to: ..."mqttClient->publish(topic, payload);
+
+   - Try subscribing again if failedwhile (!responseState.received) {
+
+    mqttClient->processLoop();  // Process incoming messages
+
+3. **Increase timeout**:    vTaskDelay(pdMS_TO_TICKS(200));
+
+   ```cpp}
+
+   waitForResponse(client, 30000);  // 30 seconds```
+
+   ```
+
+### 3. Infinite Loop on Disconnect
+
+4. **Check processLoop frequency**:
+
+   - Call at least every 200ms❌ **Wrong:**
+
+   - More frequent = lower latency```cpp
+
+while (!responseState.received) {
+
+### Connection Drops    mqttClient->processLoop();  // Returns false on disconnect!
+
+}
+
+- Increase keepalive interval in config```
+
+- Call processLoop() regularly (even without waiting for messages)
+
+- Check network stability✅ **Correct:**
+
+- Monitor with connection callback```cpp
+
+while (!responseState.received) {
+
+### Memory Leaks    if (!mqttClient->processLoop()) {
+
+        LOPCORE_LOGE(TAG, "Disconnected");
+
+- Ensure response payloads are cleared        return false;
+
+- Call `g_response.reset()` after processing    }
+
+- Monitor heap: `esp_get_free_heap_size()`}
+
+```
+
+## Comparison: Async vs Sync
+
+## Troubleshooting
+
+| Feature | Async (Example 05) | Sync (Example 06) |
+
+|---------|-------------------|-------------------|### Subscription Timeout
+
+| Processing | Automatic background task | Manual processLoop() calls |
+
+| Use Case | Event-driven pub/sub | Request-response, transactions |**Symptom:** `subscribeWithProcessing()` times out
+
+| Complexity | Simpler | More control |
+
+| Timing | Non-deterministic | Deterministic |**Solutions:**
+
+| Overhead | Background task | Manual polling |- Verify network connectivity
+
+- Check MQTT broker is reachable
+
+## Next Steps- Increase timeout (default 5000ms)
+
+- Enable debug logging
+
+- **Production**: Add timeout handling, retry logic, error recovery
+
+- **State Machine**: Build complex workflows with manual processing### Response Timeout
+
+- **Testing**: Create comprehensive request-response test suites
+
+**Symptom:** `waitForResponse()` times out
+
+## Further Reading
+
+**Solutions:**
+
+- [MQTT Client Selection Guide](../../docs/MQTT_CLIENTS.md)- Verify response topic is correct
+
+- [CoreMQTT ProcessLoop Usage](../../docs/COREMQTT_PROCESSLOOP_USAGE.md)- Check responder is publishing response
+
+- [CoreMQTT Documentation](https://github.com/FreeRTOS/coreMQTT)- Increase timeout (default 10000ms)
+
+- Add debug logging in message callback
+- Verify callback is receiving messages
+
+### ProcessLoop Returns False
+
+**Symptom:** `processLoop()` returns false immediately
+
+**Solutions:**
+- Check TLS connection is still active
+- Verify network hasn't disconnected
+- Check for keepalive timeout (1200s AWS IoT)
+- Add reconnection logic
+
+### Memory Leaks
+
+**Symptom:** Memory usage grows over time
+
+**Solutions:**
+- Ensure response payload is cleared
+- Check no accumulating subscriptions
+- Monitor heap with `esp_get_free_heap_size()`
+
+## Performance Tips
+
+1. **Tune Polling Interval**: Match your TLS recv timeout (200ms typical)
+2. **Minimize Allocations**: Reuse buffers for payloads
+3. **Batch Processing**: Process multiple messages per `processLoop()` call
+4. **Timeout Management**: Set realistic timeouts (5-10 seconds typical)
+5. **Error Handling**: Always check `processLoop()` return value
+
+## Further Reading
+
+- [MQTT Client Selection Guide](../../docs/MQTT_CLIENTS.md)
+- [CoreMQTT Async Example](../05_mqtt_coremqtt_async/) - Background processing
+- [ESP-MQTT Example](../04_mqtt_esp_client/) - Standard brokers
+- [AWS IoT Fleet Provisioning](https://docs.aws.amazon.com/iot/latest/developerguide/provision-wo-cert.html)
+- [CoreMQTT Documentation](https://freertos.github.io/coreMQTT/)
+
+## License
+
+MIT License - See [LICENSE](../../LICENSE) for details.

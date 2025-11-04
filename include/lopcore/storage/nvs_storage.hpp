@@ -45,12 +45,15 @@ namespace lopcore
  *
  * Example:
  * @code
- * auto storage = std::make_unique<NvsStorage>("app_config");
- * storage->write("wifi_ssid", "MyNetwork");
- * auto ssid = storage->read("wifi_ssid");
+ * storage::NvsConfig config;
+ * config.setNamespace("app_config").setReadOnly(false);
+ * NvsStorage storage(config);
+ * storage.writeString("wifi_ssid", "MyNetwork");
+ * std::string ssid;
+ * storage.readString("wifi_ssid", ssid);
  * @endcode
  */
-class NvsStorage : public IStorage
+class NvsStorage
 {
 public:
     /**
@@ -83,20 +86,20 @@ public:
     /**
      * @brief Destructor - closes NVS handle
      */
-    ~NvsStorage() override;
+    ~NvsStorage();
 
-    // IStorage interface implementation
-    bool write(const std::string &key, const std::string &data) override;
-    bool write(const std::string &key, const std::vector<uint8_t> &data) override;
-    std::optional<std::string> read(const std::string &key) override;
-    std::optional<std::vector<uint8_t>> readBinary(const std::string &key) override;
-    bool exists(const std::string &key) override;
-    std::vector<std::string> listKeys() override;
-    bool remove(const std::string &key) override;
-    size_t getTotalSize() const override;
-    size_t getUsedSize() const override;
-    size_t getFreeSize() const override;
-    StorageType getType() const override
+    // Storage interface methods
+    bool write(const std::string &key, const std::string &data);
+    bool write(const std::string &key, const std::vector<uint8_t> &data);
+    std::optional<std::string> read(const std::string &key);
+    std::optional<std::vector<uint8_t>> readBinary(const std::string &key);
+    bool exists(const std::string &key);
+    std::vector<std::string> listKeys();
+    bool remove(const std::string &key);
+    size_t getTotalSize() const;
+    size_t getUsedSize() const;
+    size_t getFreeSize() const;
+    StorageType getType() const
     {
         return StorageType::NVS;
     }

@@ -29,7 +29,6 @@
 #include "lopcore/storage/nvs_storage.hpp"
 #include "lopcore/storage/spiffs_storage.hpp"
 #include "lopcore/storage/storage_config.hpp"
-#include "lopcore/storage/storage_factory.hpp"
 #include "lopcore/storage/storage_traits.hpp"
 #include "lopcore/storage/storage_type.hpp"
 

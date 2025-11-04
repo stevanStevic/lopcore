@@ -22,7 +22,6 @@ set(LOPCORE_SRCS
     # Storage subsystem
     "src/storage/spiffs_storage.cpp"
     "src/storage/nvs_storage.cpp"
-    "src/storage/storage_factory.cpp"
 
     # TLS subsystem
     "src/tls/c_wrappers/mbedtls_pkcs11_posix.c"

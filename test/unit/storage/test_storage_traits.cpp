@@ -8,11 +8,11 @@
  * @license MIT License
  */
 
+#include <gtest/gtest.h>
+
 #include "lopcore/storage/nvs_storage.hpp"
 #include "lopcore/storage/spiffs_storage.hpp"
 #include "lopcore/storage/storage_traits.hpp"
-
-#include <gtest/gtest.h>
 
 using namespace lopcore;
 using namespace lopcore::storage;
@@ -79,7 +79,7 @@ TEST(StorageTraitsTest, NvsTraits)
 /**
  * @brief Example generic config manager that adapts to storage type
  */
-template <typename Storage>
+template<typename Storage>
 class TestConfigManager
 {
 public:
@@ -138,10 +138,7 @@ TEST(StorageTraitsTest, GenericAlgorithmWithNvs)
 TEST(StorageConfigTest, SpiffsConfigBuilder)
 {
     SpiffsConfig config;
-    config.setBasePath("/custom")
-        .setPartitionLabel("my_partition")
-        .setMaxFiles(10)
-        .setFormatIfFailed(true);
+    config.setBasePath("/custom").setPartitionLabel("my_partition").setMaxFiles(10).setFormatIfFailed(true);
 
     EXPECT_EQ(config.basePath, "/custom");
     EXPECT_EQ(config.partitionLabel, "my_partition");

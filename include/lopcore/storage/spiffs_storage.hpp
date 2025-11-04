@@ -39,12 +39,15 @@ namespace lopcore
  *
  * Example:
  * @code
- * auto storage = std::make_unique<SpiffsStorage>("/spiffs");
- * storage->write("app.log", "Application started");
- * auto log = storage->read("app.log");
+ * storage::SpiffsConfig config;
+ * config.setBasePath("/spiffs").setFormatIfFailed(true);
+ * SpiffsStorage storage(config);
+ * storage.writeString("app.log", "Application started");
+ * std::string log;
+ * storage.readString("app.log", log);
  * @endcode
  */
-class SpiffsStorage : public IStorage
+class SpiffsStorage
 {
 public:
     /**
@@ -78,20 +81,20 @@ public:
     /**
      * @brief Destructor - unmounts SPIFFS if this was the initializer
      */
-    ~SpiffsStorage() override;
+    ~SpiffsStorage();
 
-    // IStorage interface implementation
-    bool write(const std::string &key, const std::string &data) override;
-    bool write(const std::string &key, const std::vector<uint8_t> &data) override;
-    std::optional<std::string> read(const std::string &key) override;
-    std::optional<std::vector<uint8_t>> readBinary(const std::string &key) override;
-    bool exists(const std::string &key) override;
-    std::vector<std::string> listKeys() override;
-    bool remove(const std::string &key) override;
-    size_t getTotalSize() const override;
-    size_t getUsedSize() const override;
-    size_t getFreeSize() const override;
-    StorageType getType() const override
+    // Storage interface methods
+    bool write(const std::string &key, const std::string &data);
+    bool write(const std::string &key, const std::vector<uint8_t> &data);
+    std::optional<std::string> read(const std::string &key);
+    std::optional<std::vector<uint8_t>> readBinary(const std::string &key);
+    bool exists(const std::string &key);
+    std::vector<std::string> listKeys();
+    bool remove(const std::string &key);
+    size_t getTotalSize() const;
+    size_t getUsedSize() const;
+    size_t getFreeSize() const;
+    StorageType getType() const
     {
         return StorageType::SPIFFS;
     }

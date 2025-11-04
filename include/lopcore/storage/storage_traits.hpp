@@ -56,23 +56,24 @@ namespace traits
  * File-based storage: SpiffsStorage, LittleFsStorage, SdCardStorage
  * Not file-based: NvsStorage (key-value store)
  */
-template <typename T, typename = void>
+template<typename T, typename = void>
 struct is_file_based : std::false_type
 {
 };
 
-template <typename T>
-struct is_file_based<T,
-                     std::void_t<decltype(std::declval<T>().read(std::declval<const std::string &>(),
-                                                                  std::declval<std::vector<uint8_t> &>())),
-                                 decltype(std::declval<T>().write(std::declval<const std::string &>(),
-                                                                   std::declval<const std::vector<uint8_t> &>())),
-                                 decltype(std::declval<T>().exists(std::declval<const std::string &>(),
-                                                                    std::declval<bool &>()))>> : std::true_type
+template<typename T>
+struct is_file_based<
+    T,
+    std::void_t<decltype(std::declval<T>().read(std::declval<const std::string &>(),
+                                                std::declval<std::vector<uint8_t> &>())),
+                decltype(std::declval<T>().write(std::declval<const std::string &>(),
+                                                 std::declval<const std::vector<uint8_t> &>())),
+                decltype(std::declval<T>().exists(std::declval<const std::string &>(),
+                                                  std::declval<bool &>()))>> : std::true_type
 {
 };
 
-template <typename T>
+template<typename T>
 inline constexpr bool is_file_based_v = is_file_based<T>::value;
 
 // ========================================
@@ -90,22 +91,23 @@ inline constexpr bool is_file_based_v = is_file_based<T>::value;
  * Key-value storage: NvsStorage
  * Also supports strings: SpiffsStorage (as file operations)
  */
-template <typename T, typename = void>
+template<typename T, typename = void>
 struct is_key_value : std::false_type
 {
 };
 
-template <typename T>
-struct is_key_value<
-    T, std::void_t<decltype(std::declval<T>().readString(std::declval<const std::string &>(),
-                                                          std::declval<std::string &>())),
-                   decltype(std::declval<T>().writeString(std::declval<const std::string &>(),
-                                                           std::declval<const std::string &>())),
-                   decltype(std::declval<T>().erase(std::declval<const std::string &>()))>> : std::true_type
+template<typename T>
+struct is_key_value<T,
+                    std::void_t<decltype(std::declval<T>().readString(std::declval<const std::string &>(),
+                                                                      std::declval<std::string &>())),
+                                decltype(std::declval<T>().writeString(std::declval<const std::string &>(),
+                                                                       std::declval<const std::string &>())),
+                                decltype(std::declval<T>().erase(std::declval<const std::string &>()))>>
+    : std::true_type
 {
 };
 
-template <typename T>
+template<typename T>
 inline constexpr bool is_key_value_v = is_key_value<T>::value;
 
 // ========================================
@@ -123,26 +125,25 @@ inline constexpr bool is_key_value_v = is_key_value<T>::value;
  *
  * NVS-specific feature for type-safe key-value storage.
  */
-template <typename T, typename = void>
+template<typename T, typename = void>
 struct has_typed_operations : std::false_type
 {
 };
 
-template <typename T>
+template<typename T>
 struct has_typed_operations<
-    T, std::void_t<decltype(std::declval<T>().readU32(std::declval<const std::string &>(),
-                                                       std::declval<uint32_t &>())),
-                   decltype(std::declval<T>().writeU32(std::declval<const std::string &>(),
-                                                        std::declval<uint32_t>())),
-                   decltype(std::declval<T>().readBlob(std::declval<const std::string &>(),
-                                                        std::declval<std::vector<uint8_t> &>())),
-                   decltype(std::declval<T>().writeBlob(std::declval<const std::string &>(),
-                                                         std::declval<const std::vector<uint8_t> &>()))>>
-    : std::true_type
+    T,
+    std::void_t<
+        decltype(std::declval<T>().readU32(std::declval<const std::string &>(), std::declval<uint32_t &>())),
+        decltype(std::declval<T>().writeU32(std::declval<const std::string &>(), std::declval<uint32_t>())),
+        decltype(std::declval<T>().readBlob(std::declval<const std::string &>(),
+                                            std::declval<std::vector<uint8_t> &>())),
+        decltype(std::declval<T>().writeBlob(std::declval<const std::string &>(),
+                                             std::declval<const std::vector<uint8_t> &>()))>> : std::true_type
 {
 };
 
-template <typename T>
+template<typename T>
 inline constexpr bool has_typed_operations_v = has_typed_operations<T>::value;
 
 // ========================================
@@ -158,17 +159,17 @@ inline constexpr bool has_typed_operations_v = has_typed_operations<T>::value;
  * NVS requires explicit commit to persist writes.
  * File-based storage (SPIFFS) writes are immediate.
  */
-template <typename T, typename = void>
+template<typename T, typename = void>
 struct requires_commit : std::false_type
 {
 };
 
-template <typename T>
+template<typename T>
 struct requires_commit<T, std::void_t<decltype(std::declval<T>().commit())>> : std::true_type
 {
 };
 
-template <typename T>
+template<typename T>
 inline constexpr bool requires_commit_v = requires_commit<T>::value;
 
 // ========================================
@@ -184,17 +185,17 @@ inline constexpr bool requires_commit_v = requires_commit<T>::value;
  * Both SPIFFS and NVS support formatting.
  * SD card storage typically doesn't expose format.
  */
-template <typename T, typename = void>
+template<typename T, typename = void>
 struct supports_format : std::false_type
 {
 };
 
-template <typename T>
+template<typename T>
 struct supports_format<T, std::void_t<decltype(std::declval<T>().format())>> : std::true_type
 {
 };
 
-template <typename T>
+template<typename T>
 inline constexpr bool supports_format_v = supports_format<T>::value;
 
 // ========================================
@@ -212,22 +213,23 @@ inline constexpr bool supports_format_v = supports_format<T>::value;
  * - File operations (SPIFFS: readString reads file content)
  * - Key-value operations (NVS: readString reads string value)
  */
-template <typename T, typename = void>
+template<typename T, typename = void>
 struct supports_strings : std::false_type
 {
 };
 
-template <typename T>
-struct supports_strings<T,
-                        std::void_t<decltype(std::declval<T>().readString(std::declval<const std::string &>(),
-                                                                           std::declval<std::string &>())),
-                                    decltype(std::declval<T>().writeString(std::declval<const std::string &>(),
-                                                                            std::declval<const std::string &>()))>>
+template<typename T>
+struct supports_strings<
+    T,
+    std::void_t<decltype(std::declval<T>().readString(std::declval<const std::string &>(),
+                                                      std::declval<std::string &>())),
+                decltype(std::declval<T>().writeString(std::declval<const std::string &>(),
+                                                       std::declval<const std::string &>()))>>
     : std::true_type
 {
 };
 
-template <typename T>
+template<typename T>
 inline constexpr bool supports_strings_v = supports_strings<T>::value;
 
 } // namespace traits

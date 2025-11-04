@@ -8,17 +8,17 @@ This example shows how to use the ESP-MQTT client for simple pub/sub messaging w
 
 ## Features
 
-- Connect to public MQTT broker
-- Subscribe to command topics
-- Publish telemetry data periodically
-- Handle incoming messages with callbacks
-- Connection status monitoring
-- Message statistics
+-   Connect to public MQTT broker
+-   Subscribe to command topics
+-   Publish telemetry data periodically
+-   Handle incoming messages with callbacks
+-   Connection status monitoring
+-   Message statistics
 
 ## Prerequisites
 
-- ESP32 connected to WiFi
-- Access to MQTT broker (uses `test.mosquitto.org` by default)
+-   ESP32 connected to WiFi
+-   Access to MQTT broker (uses `test.mosquitto.org` by default)
 
 ## Configuration
 
@@ -73,6 +73,7 @@ mosquitto_sub -h test.mosquitto.org -t "lopcore/demo/#" -v
 ```
 
 You'll see periodic telemetry like:
+
 ```
 lopcore/demo/status {"counter":0,"uptime":45,"heap":298432}
 lopcore/demo/status {"counter":1,"uptime":60,"heap":298432}
@@ -133,8 +134,8 @@ mqttClient->subscribe(topic, [](const std::string& topic,
 ### 5. Publish Messages
 
 ```cpp
-mqttClient->publishString(topic, "message", 
-                         MqttQos::AT_LEAST_ONCE, 
+mqttClient->publishString(topic, "message",
+                         MqttQos::AT_LEAST_ONCE,
                          false);
 ```
 
@@ -144,33 +145,35 @@ mqttClient->publishString(topic, "message",
 2. **Subscribes** to commands topic
 3. **Publishes** initial online status
 4. **Sends telemetry** every 15 seconds:
-   - Message counter
-   - Device uptime (seconds)
-   - Free heap memory (bytes)
+    - Message counter
+    - Device uptime (seconds)
+    - Free heap memory (bytes)
 5. **Logs** all received messages
 6. **Shows statistics** periodically
 
 ## When to Use ESP-MQTT
 
 ✅ **Use ESP-MQTT when:**
-- Connecting to standard MQTT brokers
-- Want simple async event handling
-- Don't need manual message processing
-- Prefer ESP-IDF native solution
+
+-   Connecting to standard MQTT brokers
+-   Want simple async event handling
+-   Don't need manual message processing
+-   Prefer ESP-IDF native solution
 
 ❌ **Consider CoreMQTT instead for:**
-- AWS IoT Core connections (see example 05)
-- Manual message control (see example 06)
-- Request-response patterns
-- Fleet Provisioning workflows
+
+-   AWS IoT Core connections (see example 05)
+-   Manual message control (see example 06)
+-   Request-response patterns
+-   Fleet Provisioning workflows
 
 ## Next Steps
 
-- **Example 05**: TLS connection with CoreMQTT
-- **Example 06**: Request-response patterns
-- **Production**: Add WiFi setup, error recovery, OTA updates
+-   **Example 05**: TLS connection with CoreMQTT
+-   **Example 06**: Request-response patterns
+-   **Production**: Add WiFi setup, error recovery, OTA updates
 
 ## Further Reading
 
-- [MQTT Client Selection Guide](../../docs/MQTT_CLIENTS.md)
-- [ESP-MQTT Documentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/protocols/mqtt.html)
+-   [MQTT Client Selection Guide](../../docs/MQTT_CLIENTS.md)
+-   [ESP-MQTT Documentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/protocols/mqtt.html)

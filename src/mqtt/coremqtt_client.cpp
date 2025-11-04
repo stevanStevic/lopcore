@@ -871,7 +871,7 @@ esp_err_t CoreMqttClient::stopProcessLoopTask()
     // Max wait time: processLoop timeout + delay + some overhead
     const uint32_t maxWaitMs = config_.processLoopTimeoutMs + config_.processLoopDelayMs + 100;
     const TickType_t maxWaitTicks = pdMS_TO_TICKS(maxWaitMs);
-    
+
     if (xSemaphoreTake(taskStoppedSemaphore_, maxWaitTicks) == pdTRUE)
     {
         LOPCORE_LOGI(TAG, "ProcessLoop task stopped gracefully");
@@ -960,10 +960,10 @@ void CoreMqttClient::processLoopTask()
     }
 
     LOPCORE_LOGI(TAG, "ProcessLoop task exiting gracefully");
-    
+
     // Signal that we've stopped (give semaphore before deleting ourselves)
     xSemaphoreGive(taskStoppedSemaphore_);
-    
+
     // Delete ourselves
     vTaskDelete(nullptr);
 }

@@ -100,23 +100,26 @@ lopcore::SpiffsStorage spiffsStorage(spiffsConfig);
 ```
 
 **Benefits:**
-- Explicit configuration with type safety
-- Fluent builder API for readable code
-- Direct object ownership (no pointers needed)
-- Zero overhead - no virtual function calls
-- Compile-time type checking
+
+-   Explicit configuration with type safety
+-   Fluent builder API for readable code
+-   Direct object ownership (no pointers needed)
+-   Zero overhead - no virtual function calls
+-   Compile-time type checking
 
 ### Configuration Options
 
 **NvsConfig:**
-- `setNamespace(const char*)` - NVS namespace name
-- `setReadOnly(bool)` - Open in read-only mode
+
+-   `setNamespace(const char*)` - NVS namespace name
+-   `setReadOnly(bool)` - Open in read-only mode
 
 **SpiffsConfig:**
-- `setBasePath(const char*)` - Mount point (e.g., "/spiffs")
-- `setPartitionLabel(const char*)` - Partition label (optional)
-- `setMaxFiles(size_t)` - Maximum open files
-- `setFormatIfFailed(bool)` - Auto-format on mount failure
+
+-   `setBasePath(const char*)` - Mount point (e.g., "/spiffs")
+-   `setPartitionLabel(const char*)` - Partition label (optional)
+-   `setMaxFiles(size_t)` - Maximum open files
+-   `setFormatIfFailed(bool)` - Auto-format on mount failure
 
 ### Error Handling with std::optional
 

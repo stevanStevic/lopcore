@@ -4,14 +4,14 @@ This directory contains example applications demonstrating LopCore middleware fe
 
 ## Available Examples
 
-| Example                                                     | Description                                          | Components Used                     |
-| ----------------------------------------------------------- | ---------------------------------------------------- | ----------------------------------- |
-| [01_basic_logging](01_basic_logging/)                       | Console logging with different log levels            | Logger, ConsoleSink                 |
-| [02_storage_basics](02_storage_basics/)                     | NVS and SPIFFS storage operations                    | StorageFactory, NVS, SPIFFS         |
-| [03_state_machine](03_state_machine/)                       | Type-safe hierarchical state machine                 | StateMachine, IState                |
-| [04_mqtt_esp_client](04_mqtt_esp_client/)                   | ESP-MQTT client with subscriptions and publishing    | EspMqttClient                       |
-| [05_mqtt_coremqtt_async](05_mqtt_coremqtt_async/)           | CoreMQTT async mode with AWS IoT Device Shadow       | CoreMqttClient, TLS, PKCS#11        |
-| [06_mqtt_coremqtt_sync](06_mqtt_coremqtt_sync/)             | CoreMQTT manual mode for Fleet Provisioning pattern  | CoreMqttClient, TLS, PKCS#11        |
+| Example                                           | Description                                         | Components Used              |
+| ------------------------------------------------- | --------------------------------------------------- | ---------------------------- |
+| [01_basic_logging](01_basic_logging/)             | Console logging with different log levels           | Logger, ConsoleSink          |
+| [02_storage_basics](02_storage_basics/)           | NVS and SPIFFS storage operations                   | StorageFactory, NVS, SPIFFS  |
+| [03_state_machine](03_state_machine/)             | Type-safe hierarchical state machine                | StateMachine, IState         |
+| [04_mqtt_esp_client](04_mqtt_esp_client/)         | ESP-MQTT client with subscriptions and publishing   | EspMqttClient                |
+| [05_mqtt_coremqtt_async](05_mqtt_coremqtt_async/) | CoreMQTT async mode with AWS IoT Device Shadow      | CoreMqttClient, TLS, PKCS#11 |
+| [06_mqtt_coremqtt_sync](06_mqtt_coremqtt_sync/)   | CoreMQTT manual mode for Fleet Provisioning pattern | CoreMqttClient, TLS, PKCS#11 |
 
 ### Coming Soon
 
@@ -74,9 +74,10 @@ Each example is a complete ESP-IDF project with:
 Not sure which MQTT example to use? See [MQTT Client Selection Guide](../docs/MQTT_CLIENTS.md).
 
 **Quick decision:**
-- **Standard MQTT broker** (Mosquitto, HiveMQ, etc.) → Use example 04 (ESP-MQTT)
-- **AWS IoT Core** with Device Shadow/Jobs → Use example 05 (CoreMQTT async)
-- **AWS IoT Fleet Provisioning** → Use example 06 (CoreMQTT sync)
+
+-   **Standard MQTT broker** (Mosquitto, HiveMQ, etc.) → Use example 04 (ESP-MQTT)
+-   **AWS IoT Core** with Device Shadow/Jobs → Use example 05 (CoreMQTT async)
+-   **AWS IoT Fleet Provisioning** → Use example 06 (CoreMQTT sync)
 
 ## Common Patterns
 

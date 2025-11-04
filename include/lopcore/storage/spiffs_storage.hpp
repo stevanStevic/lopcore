@@ -19,6 +19,7 @@
 #include <string>
 
 #include "istorage.hpp"
+#include "storage_config.hpp"
 
 namespace lopcore
 {
@@ -47,14 +48,32 @@ class SpiffsStorage : public IStorage
 {
 public:
     /**
-     * @brief Construct SPIFFS storage with base path
+     * @brief Construct SPIFFS storage with configuration (RECOMMENDED)
+     *
+     * @param config SpiffsConfig with all settings
+     *
+     * Example:
+     * @code
+     * SpiffsConfig config;
+     * config.setBasePath("/spiffs")
+     *       .setMaxFiles(10)
+     *       .setFormatIfFailed(true);
+     * SpiffsStorage storage(config);
+     * @endcode
+     */
+    explicit SpiffsStorage(const storage::SpiffsConfig &config);
+
+    /**
+     * @brief Construct SPIFFS storage with base path (DEPRECATED - use config constructor)
      *
      * @param basePath Mount point for SPIFFS (default: "/spiffs")
      *
+     * @deprecated Use SpiffsStorage(const SpiffsConfig&) instead
      * @note Automatically initializes SPIFFS if not already initialized
      * @note Will format SPIFFS if mount fails and format_if_mount_failed is true
      */
-    explicit SpiffsStorage(const std::string &basePath = "/spiffs");
+    [[deprecated("Use SpiffsStorage(const SpiffsConfig&) constructor instead")]] explicit SpiffsStorage(
+        const std::string &basePath = "/spiffs");
 
     /**
      * @brief Destructor - unmounts SPIFFS if this was the initializer

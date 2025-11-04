@@ -35,6 +35,12 @@ static const char *TAG = "SpiffsStorage";
 namespace lopcore
 {
 
+SpiffsStorage::SpiffsStorage(const storage::SpiffsConfig &config)
+    : basePath_(config.basePath), initialized_(false)
+{
+    initialized_ = initialize();
+}
+
 SpiffsStorage::SpiffsStorage(const std::string &basePath) : basePath_(basePath), initialized_(false)
 {
     initialized_ = initialize();

@@ -35,6 +35,16 @@ namespace lopcore
 static std::map<std::string, std::map<std::string, std::vector<uint8_t>>> g_nvsData;
 #endif
 
+NvsStorage::NvsStorage(const storage::NvsConfig &config)
+    : namespaceName_(config.namespaceName), initialized_(false)
+#ifdef ESP_PLATFORM
+      ,
+      handle_(0)
+#endif
+{
+    initialized_ = initialize();
+}
+
 NvsStorage::NvsStorage(const std::string &namespaceName)
     : namespaceName_(namespaceName), initialized_(false)
 #ifdef ESP_PLATFORM

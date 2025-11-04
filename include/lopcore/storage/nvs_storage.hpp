@@ -19,6 +19,7 @@
 #include <string>
 
 #include "istorage.hpp"
+#include "storage_config.hpp"
 
 #ifdef ESP_PLATFORM
 #include <nvs.h>
@@ -53,14 +54,31 @@ class NvsStorage : public IStorage
 {
 public:
     /**
-     * @brief Construct NVS storage with namespace
+     * @brief Construct NVS storage with configuration (RECOMMENDED)
+     *
+     * @param config NvsConfig with all settings
+     *
+     * Example:
+     * @code
+     * NvsConfig config;
+     * config.setNamespace("my_app")
+     *       .setReadOnly(false);
+     * NvsStorage storage(config);
+     * @endcode
+     */
+    explicit NvsStorage(const storage::NvsConfig &config);
+
+    /**
+     * @brief Construct NVS storage with namespace (DEPRECATED - use config constructor)
      *
      * @param namespaceName NVS namespace (default: "lopcore")
      *
+     * @deprecated Use NvsStorage(const NvsConfig&) instead
      * @note Automatically initializes NVS flash if not already initialized
      * @note Namespace must be <= 15 characters
      */
-    explicit NvsStorage(const std::string &namespaceName = "lopcore");
+    [[deprecated("Use NvsStorage(const NvsConfig&) constructor instead")]] explicit NvsStorage(
+        const std::string &namespaceName = "lopcore");
 
     /**
      * @brief Destructor - closes NVS handle

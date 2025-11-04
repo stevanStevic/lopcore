@@ -126,13 +126,13 @@ public:
      */
     const std::string &getBasePath() const
     {
-        return basePath_;
+        return config_.basePath;
     }
 
 private:
-    std::string basePath_;     ///< Base path for SPIFFS mount point
-    bool initialized_;         ///< Whether SPIFFS was initialized by this instance
-    mutable std::mutex mutex_; ///< Mutex for thread safety
+    storage::SpiffsConfig config_; ///< SPIFFS configuration
+    bool initialized_;             ///< Whether SPIFFS was initialized by this instance
+    mutable std::mutex mutex_;     ///< Mutex for thread safety
 
     /**
      * @brief Get full file path from key

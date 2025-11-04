@@ -36,7 +36,7 @@ static std::map<std::string, std::map<std::string, std::vector<uint8_t>>> g_nvsD
 #endif
 
 NvsStorage::NvsStorage(const storage::NvsConfig &config)
-    : namespaceName_(config.namespaceName), initialized_(false)
+    : config_(config), initialized_(false)
 #ifdef ESP_PLATFORM
       ,
       handle_(0)
@@ -46,7 +46,7 @@ NvsStorage::NvsStorage(const storage::NvsConfig &config)
 }
 
 NvsStorage::NvsStorage(const std::string &namespaceName)
-    : namespaceName_(namespaceName), initialized_(false)
+    : config_(storage::NvsConfig(namespaceName)), initialized_(false)
 #ifdef ESP_PLATFORM
       ,
       handle_(0)
@@ -82,11 +82,11 @@ bool NvsStorage::initialize()
         return false;
     }
 
-    ESP_LOGI(TAG, "NVS initialized with namespace: %s", namespaceName_.c_str());
+    ESP_LOGI(TAG, "NVS initialized with namespace: %s", config_.namespaceName.c_str());
     return true;
 #else
     // Host: Mock initialization
-    ESP_LOGI(TAG, "NVS initialized (mock) with namespace: %s", namespaceName_.c_str());
+    ESP_LOGI(TAG, "NVS initialized (mock) with namespace: %s", config_.namespaceName.c_str());
     return true;
 #endif
 }
@@ -99,7 +99,8 @@ bool NvsStorage::openHandle()
         return true; // Already open
     }
 
-    esp_err_t ret = nvs_open(namespaceName_.c_str(), NVS_READWRITE, &handle_);
+    nvs_open_mode_t mode = config_.readOnly ? NVS_READONLY : NVS_READWRITE;
+    esp_err_t ret = nvs_open(config_.namespaceName.c_str(), mode, &handle_);
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "Failed to open NVS handle: %d", ret);
@@ -171,7 +172,7 @@ bool NvsStorage::write(const std::string &key, const std::string &data)
     // Host mock
     std::vector<uint8_t> bytes(data.begin(), data.end());
     bytes.push_back('\0'); // Null terminator
-    g_nvsData[namespaceName_][key] = bytes;
+    g_nvsData[config_.namespaceName][key] = bytes;
     ESP_LOGI(TAG, "Wrote string key '%s' (%zu bytes) [MOCK]", key.c_str(), data.length());
     return true;
 #endif
@@ -217,7 +218,7 @@ bool NvsStorage::write(const std::string &key, const std::vector<uint8_t> &data)
     return true;
 #else
     // Host mock
-    g_nvsData[namespaceName_][key] = data;
+    g_nvsData[config_.namespaceName][key] = data;
     ESP_LOGI(TAG, "Wrote binary key '%s' (%zu bytes) [MOCK]", key.c_str(), data.size());
     return true;
 #endif
@@ -271,10 +272,10 @@ std::optional<std::string> NvsStorage::read(const std::string &key)
     return value;
 #else
     // Host mock
-    auto nsIt = g_nvsData.find(namespaceName_);
+    auto nsIt = g_nvsData.find(config_.namespaceName);
     if (nsIt == g_nvsData.end())
     {
-        ESP_LOGE(TAG, "Namespace not found: '%s'", namespaceName_.c_str());
+        ESP_LOGE(TAG, "Namespace not found: '%s'", config_.namespaceName.c_str());
         return std::nullopt;
     }
 
@@ -346,10 +347,10 @@ std::optional<std::vector<uint8_t>> NvsStorage::readBinary(const std::string &ke
     return data;
 #else
     // Host mock
-    auto nsIt = g_nvsData.find(namespaceName_);
+    auto nsIt = g_nvsData.find(config_.namespaceName);
     if (nsIt == g_nvsData.end())
     {
-        ESP_LOGE(TAG, "Namespace not found: '%s'", namespaceName_.c_str());
+        ESP_LOGE(TAG, "Namespace not found: '%s'", config_.namespaceName.c_str());
         return std::nullopt;
     }
 
@@ -397,7 +398,7 @@ bool NvsStorage::exists(const std::string &key)
     return (ret == ESP_OK);
 #else
     // Host mock
-    auto nsIt = g_nvsData.find(namespaceName_);
+    auto nsIt = g_nvsData.find(config_.namespaceName);
     if (nsIt == g_nvsData.end())
     {
         return false;
@@ -427,7 +428,7 @@ std::vector<std::string> NvsStorage::listKeys()
     return keys;
 #else
     // Host mock - we can list keys
-    auto nsIt = g_nvsData.find(namespaceName_);
+    auto nsIt = g_nvsData.find(config_.namespaceName);
     if (nsIt != g_nvsData.end())
     {
         for (const auto &pair : nsIt->second)
@@ -487,7 +488,7 @@ bool NvsStorage::remove(const std::string &key)
     return true;
 #else
     // Host mock
-    auto nsIt = g_nvsData.find(namespaceName_);
+    auto nsIt = g_nvsData.find(config_.namespaceName);
     if (nsIt != g_nvsData.end())
     {
         nsIt->second.erase(key);
@@ -536,7 +537,7 @@ bool NvsStorage::eraseNamespace()
     esp_err_t ret = nvs_erase_all(handle_);
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to erase namespace '%s': %d", namespaceName_.c_str(), ret);
+        ESP_LOGE(TAG, "Failed to erase namespace '%s': %d", config_.namespaceName.c_str(), ret);
         return false;
     }
 
@@ -548,12 +549,12 @@ bool NvsStorage::eraseNamespace()
         return false;
     }
 
-    ESP_LOGI(TAG, "Erased namespace: '%s'", namespaceName_.c_str());
+    ESP_LOGI(TAG, "Erased namespace: '%s'", config_.namespaceName.c_str());
     return true;
 #else
     // Host mock
-    g_nvsData[namespaceName_].clear();
-    ESP_LOGI(TAG, "Erased namespace: '%s' [MOCK]", namespaceName_.c_str());
+    g_nvsData[config_.namespaceName].clear();
+    ESP_LOGI(TAG, "Erased namespace: '%s' [MOCK]", config_.namespaceName.c_str());
     return true;
 #endif
 }

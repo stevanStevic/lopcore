@@ -35,13 +35,13 @@ static const char *TAG = "SpiffsStorage";
 namespace lopcore
 {
 
-SpiffsStorage::SpiffsStorage(const storage::SpiffsConfig &config)
-    : basePath_(config.basePath), initialized_(false)
+SpiffsStorage::SpiffsStorage(const storage::SpiffsConfig &config) : config_(config), initialized_(false)
 {
     initialized_ = initialize();
 }
 
-SpiffsStorage::SpiffsStorage(const std::string &basePath) : basePath_(basePath), initialized_(false)
+SpiffsStorage::SpiffsStorage(const std::string &basePath)
+    : config_(storage::SpiffsConfig(basePath)), initialized_(false)
 {
     initialized_ = initialize();
 }
@@ -63,14 +63,16 @@ bool SpiffsStorage::initialize()
     // Check if already mounted
     if (isMounted())
     {
-        ESP_LOGI(TAG, "SPIFFS already mounted at %s", basePath_.c_str());
+        ESP_LOGI(TAG, "SPIFFS already mounted at %s", config_.basePath.c_str());
         return true;
     }
 
-    esp_vfs_spiffs_conf_t conf = {.base_path = basePath_.c_str(),
-                                  .partition_label = "spiffs_storage",
-                                  .max_files = 10,
-                                  .format_if_mount_failed = true};
+    esp_vfs_spiffs_conf_t conf = {.base_path = config_.basePath.c_str(),
+                                  .partition_label = config_.partitionLabel.empty()
+                                                         ? nullptr
+                                                         : config_.partitionLabel.c_str(),
+                                  .max_files = config_.maxFiles,
+                                  .format_if_mount_failed = config_.formatIfFailed};
 
     esp_err_t ret = esp_vfs_spiffs_register(&conf);
     if (ret != ESP_OK)
@@ -79,7 +81,7 @@ bool SpiffsStorage::initialize()
         return false;
     }
 
-    ESP_LOGI(TAG, "SPIFFS initialized at %s", basePath_.c_str());
+    ESP_LOGI(TAG, "SPIFFS initialized at %s", config_.basePath.c_str());
 
     // Log partition info
     size_t total = 0, used = 0;
@@ -93,12 +95,12 @@ bool SpiffsStorage::initialize()
 #else
     // Host: Just check/create directory
     struct stat st;
-    if (stat(basePath_.c_str(), &st) != 0)
+    if (stat(config_.basePath.c_str(), &st) != 0)
     {
         // Directory doesn't exist, try to create it
-        if (mkdir(basePath_.c_str(), 0755) != 0)
+        if (mkdir(config_.basePath.c_str(), 0755) != 0)
         {
-            ESP_LOGE(TAG, "Failed to create directory: %s", basePath_.c_str());
+            ESP_LOGE(TAG, "Failed to create directory: %s", config_.basePath.c_str());
             return false;
         }
     }
@@ -110,7 +112,7 @@ bool SpiffsStorage::isMounted() const
 {
 #ifdef ESP_PLATFORM
     struct stat st;
-    return (stat(basePath_.c_str(), &st) == 0);
+    return (stat(config_.basePath.c_str(), &st) == 0);
 #else
     return true; // Host always considers it mounted
 #endif
@@ -119,7 +121,7 @@ bool SpiffsStorage::isMounted() const
 std::string SpiffsStorage::getFullPath(const std::string &key) const
 {
     // Handle keys that already start with base path
-    if (key.find(basePath_) == 0)
+    if (key.find(config_.basePath) == 0)
     {
         return key;
     }
@@ -127,11 +129,11 @@ std::string SpiffsStorage::getFullPath(const std::string &key) const
     // Handle keys starting with /
     if (!key.empty() && key[0] == '/')
     {
-        return basePath_ + key;
+        return config_.basePath + key;
     }
 
     // Normal case: basePath + / + key
-    return basePath_ + "/" + key;
+    return config_.basePath + "/" + key;
 }
 
 bool SpiffsStorage::write(const std::string &key, const std::string &data)
@@ -312,10 +314,10 @@ std::vector<std::string> SpiffsStorage::listKeys()
         return keys;
     }
 
-    DIR *dir = opendir(basePath_.c_str());
+    DIR *dir = opendir(config_.basePath.c_str());
     if (dir == nullptr)
     {
-        ESP_LOGE(TAG, "Failed to open directory: %s", basePath_.c_str());
+        ESP_LOGE(TAG, "Failed to open directory: %s", config_.basePath.c_str());
         return keys;
     }
 
@@ -421,7 +423,7 @@ bool SpiffsStorage::format()
         return false;
     }
 #else
-    ESP_LOGI(TAG, "Format not supported on host (would delete %s/*)", basePath_.c_str());
+    ESP_LOGI(TAG, "Format not supported on host (would delete %s/*)", config_.basePath.c_str());
     return false;
 #endif
 }

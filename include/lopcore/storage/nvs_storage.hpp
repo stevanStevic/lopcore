@@ -131,11 +131,11 @@ public:
      */
     const std::string &getNamespace() const
     {
-        return namespaceName_;
+        return config_.namespaceName;
     }
 
 private:
-    std::string namespaceName_; ///< NVS namespace name
+    storage::NvsConfig config_; ///< NVS configuration
     mutable std::mutex mutex_;  ///< Mutex for thread safety
     bool initialized_;          ///< Whether NVS was initialized by this instance
 

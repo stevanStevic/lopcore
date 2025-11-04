@@ -94,7 +94,7 @@ if("coreMQTT" IN_LIST build_components OR "corePKCS11" IN_LIST build_components)
 else()
     message(STATUS "LopCore: esp-aws-iot NOT available, building without CoreMQTT support")
     # Remove sources that depend on esp-aws-iot libraries
-    list(REMOVE_ITEM LOPCORE_SRCS 
+    list(REMOVE_ITEM LOPCORE_SRCS
         "src/mqtt/coremqtt_client.cpp"
         "src/tls/pkcs11_provider.cpp"
         "src/tls/pkcs11_session.cpp"
@@ -121,7 +121,7 @@ idf_component_register(
 if(ESP_AWS_IOT_AVAILABLE)
     # Find the esp-aws-iot base path
     set(ESP_AWS_IOT_PATH "")
-    
+
     # Try common locations
     if(EXISTS "${CMAKE_SOURCE_DIR}/components/esp-aws-iot")
         set(ESP_AWS_IOT_PATH "${CMAKE_SOURCE_DIR}/components/esp-aws-iot")

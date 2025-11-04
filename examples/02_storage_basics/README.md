@@ -1,12 +1,13 @@
 # Storage Basics Example
 
-This example demonstrates both NVS and SPIFFS storage using LopCore's unified storage interface.
+This example demonstrates both NVS and SPIFFS storage using LopCore's direct construction pattern.
 
 ## What it demonstrates
 
 -   **NVS Storage**: Key-value storage for configuration (persistent across reboots)
 -   **SPIFFS Storage**: File system storage for larger data and files
--   Storage factory pattern
+-   Direct storage construction with explicit configuration
+-   Type-safe configuration with builder pattern
 -   Reading and writing text and binary data
 -   Checking file existence
 -   Listing files
@@ -84,20 +85,46 @@ I (156) STORAGE_EXAMPLE: File deleted successfully
 | **Wear Leveling** | Built-in                       | Yes                            |
 | **Best For**      | WiFi creds, settings, counters | Logs, certificates, web assets |
 
-### Factory Pattern
+### Direct Construction Pattern
 
 ```cpp
-// Create NVS storage
-auto nvs = lopcore::StorageFactory::createNvs("namespace");
+// Create NVS storage with explicit configuration
+lopcore::storage::NvsConfig nvsConfig;
+nvsConfig.setNamespace("app_config").setReadOnly(false);
+lopcore::NvsStorage nvsStorage(nvsConfig);
 
-// Create SPIFFS storage
-auto spiffs = lopcore::StorageFactory::createSpiffs("/spiffs");
+// Create SPIFFS storage with explicit configuration
+lopcore::storage::SpiffsConfig spiffsConfig;
+spiffsConfig.setBasePath("/spiffs").setMaxFiles(5).setFormatIfFailed(true);
+lopcore::SpiffsStorage spiffsStorage(spiffsConfig);
 ```
+
+**Benefits:**
+- Explicit configuration with type safety
+- Fluent builder API for readable code
+- Direct object ownership (no pointers needed)
+- Zero overhead - no virtual function calls
+- Compile-time type checking
+
+### Configuration Options
+
+**NvsConfig:**
+- `setNamespace(const char*)` - NVS namespace name
+- `setReadOnly(bool)` - Open in read-only mode
+
+**SpiffsConfig:**
+- `setBasePath(const char*)` - Mount point (e.g., "/spiffs")
+- `setPartitionLabel(const char*)` - Partition label (optional)
+- `setMaxFiles(size_t)` - Maximum open files
+- `setFormatIfFailed(bool)` - Auto-format on mount failure
 
 ### Error Handling with std::optional
 
 ```cpp
-auto data = storage->read("key");
+auto data = nvsStorage.read("key");  // Note: direct object, not pointer
+if (data) {
+    // Use data.value()
+}
 if (data)  // Check if value exists
 {
     // Use data->c_str()

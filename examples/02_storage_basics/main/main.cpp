@@ -3,10 +3,11 @@
  * @brief Storage basics example for LopCore
  *
  * Demonstrates:
- * - NVS storage for configuration
+ * - Direct storage construction with configuration
+ * - NVS storage for configuration key-value pairs
  * - SPIFFS storage for files
- * - Storage factory pattern
  * - Read/write/exists operations
+ * - Type-safe configuration with builder pattern
  */
 
 #include <stdio.h>
@@ -15,7 +16,9 @@
 #include "freertos/task.h"
 #include "lopcore/logging/console_sink.hpp"
 #include "lopcore/logging/logger.hpp"
-#include "lopcore/storage/storage_factory.hpp"
+#include "lopcore/storage/nvs_storage.hpp"
+#include "lopcore/storage/spiffs_storage.hpp"
+#include "lopcore/storage/storage_config.hpp"
 
 #include "esp_spiffs.h"
 #include "esp_system.h"
@@ -54,20 +57,24 @@ extern "C" void app_main(void)
 
     LOPCORE_LOGI(TAG, "\n--- NVS Storage Example ---");
 
-    auto nvsStorage = lopcore::StorageFactory::createNvs("app_config");
+    // Create NVS storage with explicit configuration
+    lopcore::storage::NvsConfig nvsConfig;
+    nvsConfig.setNamespace("app_config").setReadOnly(false);
+
+    lopcore::NvsStorage nvsStorage(nvsConfig);
 
     // Write configuration
     LOPCORE_LOGI(TAG, "Writing configuration to NVS...");
-    nvsStorage->write("wifi_ssid", "MyNetwork");
-    nvsStorage->write("wifi_pass", "SecurePassword123");
-    nvsStorage->write("mqtt_broker", "mqtt.example.com");
-    nvsStorage->write("device_name", "ESP32-Device-001");
+    nvsStorage.write("wifi_ssid", "MyNetwork");
+    nvsStorage.write("wifi_pass", "SecurePassword123");
+    nvsStorage.write("mqtt_broker", "mqtt.example.com");
+    nvsStorage.write("device_name", "ESP32-Device-001");
 
     // Read configuration
     LOPCORE_LOGI(TAG, "Reading configuration from NVS...");
-    auto ssid = nvsStorage->read("wifi_ssid");
-    auto broker = nvsStorage->read("mqtt_broker");
-    auto name = nvsStorage->read("device_name");
+    auto ssid = nvsStorage.read("wifi_ssid");
+    auto broker = nvsStorage.read("mqtt_broker");
+    auto name = nvsStorage.read("device_name");
 
     if (ssid && broker && name)
     {
@@ -77,7 +84,7 @@ extern "C" void app_main(void)
     }
 
     // Check if key exists
-    if (nvsStorage->exists("wifi_ssid"))
+    if (nvsStorage.exists("wifi_ssid"))
     {
         LOPCORE_LOGI(TAG, "WiFi credentials found in NVS");
     }
@@ -88,7 +95,11 @@ extern "C" void app_main(void)
 
     LOPCORE_LOGI(TAG, "\n--- SPIFFS Storage Example ---");
 
-    auto spiffsStorage = lopcore::StorageFactory::createSpiffs("/spiffs");
+    // Create SPIFFS storage with explicit configuration
+    lopcore::storage::SpiffsConfig spiffsConfig;
+    spiffsConfig.setBasePath("/spiffs").setMaxFiles(5).setFormatIfFailed(true);
+
+    lopcore::SpiffsStorage spiffsStorage(spiffsConfig);
 
     // Write a configuration file
     LOPCORE_LOGI(TAG, "Writing JSON config file...");
@@ -99,13 +110,13 @@ extern "C" void app_main(void)
     "enabled": true
 })";
 
-    if (spiffsStorage->write("config.json", jsonConfig))
+    if (spiffsStorage.write("config.json", jsonConfig))
     {
         LOPCORE_LOGI(TAG, "Config file written successfully");
     }
 
     // Read the file back
-    auto configData = spiffsStorage->read("config.json");
+    auto configData = spiffsStorage.read("config.json");
     if (configData)
     {
         LOPCORE_LOGI(TAG, "Read config file:");
@@ -115,13 +126,13 @@ extern "C" void app_main(void)
     // Write binary data (e.g., certificate)
     LOPCORE_LOGI(TAG, "\nWriting binary certificate...");
     std::vector<uint8_t> certData = {'C', 'E', 'R', 'T', 0x00, 0x01, 0x02, 0x03};
-    if (spiffsStorage->write("cert.der", certData))
+    if (spiffsStorage.write("cert.der", certData))
     {
         LOPCORE_LOGI(TAG, "Certificate written successfully");
     }
 
     // Read binary data back
-    auto readCert = spiffsStorage->read("cert.der");
+    auto readCert = spiffsStorage.read("cert.der");
     if (readCert)
     {
         LOPCORE_LOGI(TAG, "Read certificate: %zu bytes", readCert->size());
@@ -129,15 +140,15 @@ extern "C" void app_main(void)
 
     // List all files
     LOPCORE_LOGI(TAG, "\nListing files in SPIFFS:");
-    auto files = spiffsStorage->listKeys();
+    auto files = spiffsStorage.listKeys();
     for (const auto &file : files)
     {
         LOPCORE_LOGI(TAG, "  - %s", file.c_str());
     }
 
     // Check storage usage
-    size_t totalBytes = spiffsStorage->getTotalSize();
-    size_t usedBytes = spiffsStorage->getUsedSize();
+    size_t totalBytes = spiffsStorage.getTotalSize();
+    size_t usedBytes = spiffsStorage.getUsedSize();
     size_t freeBytes = totalBytes - usedBytes;
 
     LOPCORE_LOGI(TAG, "\nStorage usage:");
@@ -147,7 +158,7 @@ extern "C" void app_main(void)
 
     // Delete a file
     LOPCORE_LOGI(TAG, "\nDeleting test file...");
-    if (spiffsStorage->remove("config.json") == ESP_OK)
+    if (spiffsStorage.remove("config.json") == ESP_OK)
     {
         LOPCORE_LOGI(TAG, "File deleted successfully");
     }
@@ -155,7 +166,4 @@ extern "C" void app_main(void)
     LOPCORE_LOGI(TAG, "\n===========================================");
     LOPCORE_LOGI(TAG, "Storage example completed!");
     LOPCORE_LOGI(TAG, "===========================================");
-
-    // Clean up
-    esp_vfs_spiffs_unregister(NULL);
 }

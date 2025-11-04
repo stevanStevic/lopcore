@@ -3,11 +3,13 @@
  * @brief Storage basics example for LopCore
  *
  * Demonstrates:
- * - Direct storage construction with configuration
- * - NVS storage for configuration key-value pairs
- * - SPIFFS storage for files
+ * - Direct storage construction with complete configuration
+ * - Utilizing ALL config settings (no waste)
+ * - NVS storage: namespace and readOnly settings
+ * - SPIFFS storage: basePath, partitionLabel, maxFiles, formatIfFailed
  * - Read/write/exists operations
  * - Type-safe configuration with builder pattern
+ * - Proper configuration storage as member variables
  */
 
 #include <stdio.h>
@@ -20,28 +22,10 @@
 #include "lopcore/storage/spiffs_storage.hpp"
 #include "lopcore/storage/storage_config.hpp"
 
-#include "esp_spiffs.h"
-#include "esp_system.h"
-#include "nvs_flash.h"
-
 static const char *TAG = "STORAGE_EXAMPLE";
 
 extern "C" void app_main(void)
 {
-    // Initialize NVS
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
-    {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
-
-    // Initialize SPIFFS
-    esp_vfs_spiffs_conf_t spiffs_conf = {
-        .base_path = "/spiffs", .partition_label = NULL, .max_files = 5, .format_if_mount_failed = true};
-    ESP_ERROR_CHECK(esp_vfs_spiffs_register(&spiffs_conf));
-
     // Initialize logger
     auto &logger = lopcore::Logger::getInstance();
     logger.addSink(std::make_unique<lopcore::ConsoleSink>());
@@ -50,6 +34,8 @@ extern "C" void app_main(void)
     LOPCORE_LOGI(TAG, "===========================================");
     LOPCORE_LOGI(TAG, "LopCore Storage Basics Example");
     LOPCORE_LOGI(TAG, "===========================================");
+    LOPCORE_LOGI(TAG, "Note: NVS and SPIFFS are automatically initialized by storage classes");
+    LOPCORE_LOGI(TAG, "      using configuration provided in constructors");
 
     // =========================================================================
     // NVS Storage Example (for configuration)
@@ -57,9 +43,15 @@ extern "C" void app_main(void)
 
     LOPCORE_LOGI(TAG, "\n--- NVS Storage Example ---");
 
-    // Create NVS storage with explicit configuration
-    lopcore::storage::NvsConfig nvsConfig;
-    nvsConfig.setNamespace("app_config").setReadOnly(false);
+    // Create NVS storage with explicit configuration using builder pattern
+    // Demonstrates utilizing all config settings:
+    // - namespace: logical grouping of keys
+    // - readOnly: false to allow writes
+    auto nvsConfig = lopcore::storage::NvsConfig().setNamespace("app_config").setReadOnly(false);
+
+    LOPCORE_LOGI(TAG, "Creating NVS storage:");
+    LOPCORE_LOGI(TAG, "  Namespace: %s", nvsConfig.namespaceName.c_str());
+    LOPCORE_LOGI(TAG, "  Read-only: %s", nvsConfig.readOnly ? "true" : "false");
 
     lopcore::NvsStorage nvsStorage(nvsConfig);
 
@@ -95,9 +87,24 @@ extern "C" void app_main(void)
 
     LOPCORE_LOGI(TAG, "\n--- SPIFFS Storage Example ---");
 
-    // Create SPIFFS storage with explicit configuration
-    lopcore::storage::SpiffsConfig spiffsConfig;
-    spiffsConfig.setBasePath("/spiffs").setMaxFiles(5).setFormatIfFailed(true);
+    // Create SPIFFS storage with explicit configuration using builder pattern
+    // Demonstrates utilizing ALL config settings:
+    // - basePath: mount point for the filesystem
+    // - partitionLabel: specific partition to use (NULL for default)
+    // - maxFiles: maximum number of simultaneously open files
+    // - formatIfFailed: auto-format if mount fails (useful for first boot)
+    auto spiffsConfig = lopcore::storage::SpiffsConfig()
+                            .setBasePath("/spiffs")
+                            .setPartitionLabel("storage")  // Using specific partition
+                            .setMaxFiles(5)
+                            .setFormatIfFailed(true);
+
+    LOPCORE_LOGI(TAG, "Creating SPIFFS storage with full config:");
+    LOPCORE_LOGI(TAG, "  Base path: %s", spiffsConfig.basePath.c_str());
+    LOPCORE_LOGI(TAG, "  Partition label: %s", 
+                 spiffsConfig.partitionLabel.empty() ? "(default)" : spiffsConfig.partitionLabel.c_str());
+    LOPCORE_LOGI(TAG, "  Max files: %d", spiffsConfig.maxFiles);
+    LOPCORE_LOGI(TAG, "  Format if failed: %s", spiffsConfig.formatIfFailed ? "true" : "false");
 
     lopcore::SpiffsStorage spiffsStorage(spiffsConfig);
 
@@ -158,7 +165,7 @@ extern "C" void app_main(void)
 
     // Delete a file
     LOPCORE_LOGI(TAG, "\nDeleting test file...");
-    if (spiffsStorage.remove("config.json") == ESP_OK)
+    if (spiffsStorage.remove("config.json"))
     {
         LOPCORE_LOGI(TAG, "File deleted successfully");
     }

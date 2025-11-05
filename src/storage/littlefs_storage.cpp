@@ -15,8 +15,9 @@
 #include <fstream>
 #include <sstream>
 
-#include "esp_littlefs.h"
 #include "lopcore/logging/logger.hpp"
+
+#include "esp_littlefs.h"
 
 namespace lopcore
 {
@@ -66,7 +67,7 @@ bool LittleFsStorage::initialize()
     }
 
     LOPCORE_LOGI(TAG, "Initializing LittleFS at %s (partition: %s)", config_.basePath.c_str(),
-             config_.partitionLabel.c_str());
+                 config_.partitionLabel.c_str());
 
     esp_vfs_littlefs_conf_t conf = {.base_path = config_.basePath.c_str(),
                                     .partition_label = config_.partitionLabel.c_str(),
@@ -101,7 +102,7 @@ bool LittleFsStorage::initialize()
     {
         LOPCORE_LOGI(TAG, "LittleFS initialized successfully");
         LOPCORE_LOGI(TAG, "Total size: %zu KB, Used: %zu KB, Free: %zu KB", total / 1024, used / 1024,
-                 (total - used) / 1024);
+                     (total - used) / 1024);
     }
     else
     {

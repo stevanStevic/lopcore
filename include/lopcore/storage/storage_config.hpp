@@ -163,21 +163,25 @@ struct SdCardConfig
     bool formatIfFailed = false;
     size_t allocationUnitSize = 16 * 1024; // 16KB default
     bool useSdmmc = false;                 // Use SDMMC mode (true) or SPI mode (false)
-    
+
     // SPI mode pins (used when useSdmmc = false)
-    int spiMosi = -1;                      // GPIO pin for MOSI (use -1 for auto/default)
-    int spiMiso = -1;                      // GPIO pin for MISO
-    int spiClk = -1;                       // GPIO pin for CLK
-    int spiCs = -1;                        // GPIO pin for CS
-    
+    int spiMosi = -1; // GPIO pin for MOSI (use -1 for auto/default)
+    int spiMiso = -1; // GPIO pin for MISO
+    int spiClk = -1;  // GPIO pin for CLK
+    int spiCs = -1;   // GPIO pin for CS
+
     // SDMMC mode pins (used when useSdmmc = true)
-    int sdmmcClk = -1;                     // GPIO pin for CLK
-    int sdmmcCmd = -1;                     // GPIO pin for CMD
-    int sdmmcD0 = -1;                      // GPIO pin for D0
-    int sdmmcD1 = -1;                      // GPIO pin for D1 (optional for 1-bit mode)
-    int sdmmcD2 = -1;                      // GPIO pin for D2 (optional for 1-bit mode)
-    int sdmmcD3 = -1;                      // GPIO pin for D3 (optional for 1-bit mode)
-    int sdmmcBusWidth = 4;                 // Bus width: 1 or 4
+    int sdmmcClk = -1;     // GPIO pin for CLK
+    int sdmmcCmd = -1;     // GPIO pin for CMD
+    int sdmmcD0 = -1;      // GPIO pin for D0
+    int sdmmcD1 = -1;      // GPIO pin for D1 (optional for 1-bit mode)
+    int sdmmcD2 = -1;      // GPIO pin for D2 (optional for 1-bit mode)
+    int sdmmcD3 = -1;      // GPIO pin for D3 (optional for 1-bit mode)
+    int sdmmcBusWidth = 4; // Bus width: 1 or 4
+
+    // SDMMC flags (used when useSdmmc = true)
+    bool sdmmcEnableInternalPullups = false; // Enable internal pullups (insufficient, use 10k external)
+    uint32_t sdmmcFreqKhz = 20000; // Clock frequency in kHz (20000=20MHz default, 40000=40MHz high-speed)
 
     /**
      * @brief Set SD card mount point
@@ -278,7 +282,7 @@ struct SdCardConfig
         sdmmcD2 = d2;
         sdmmcD3 = d3;
         useSdmmc = true; // Explicitly set to SDMMC mode
-        
+
         // Determine bus width based on pins provided
         if (d1 == -1 && d2 == -1 && d3 == -1)
         {
@@ -288,7 +292,7 @@ struct SdCardConfig
         {
             sdmmcBusWidth = 4; // 4-bit mode
         }
-        
+
         return *this;
     }
 
@@ -301,6 +305,35 @@ struct SdCardConfig
     SdCardConfig &setSdmmcBusWidth(int width)
     {
         sdmmcBusWidth = width;
+        return *this;
+    }
+
+    /**
+     * @brief Enable internal pullups on SDMMC pins
+     *
+     * NOTE: Internal pullups are typically insufficient. Use 10k external
+     * pullups for production. This is mainly for debug/testing purposes.
+     *
+     * @param enable True to enable internal pullups
+     * @return Reference to this config for chaining
+     */
+    SdCardConfig &setSdmmcInternalPullups(bool enable)
+    {
+        sdmmcEnableInternalPullups = enable;
+        return *this;
+    }
+
+    /**
+     * @brief Set SDMMC clock frequency
+     *
+     * @param freqKhz Clock frequency in kHz
+     *                - 20000 (20MHz): Default speed for all cards
+     *                - 40000 (40MHz): High-speed mode (requires card support and good signal quality)
+     * @return Reference to this config for chaining
+     */
+    SdCardConfig &setSdmmcFrequency(uint32_t freqKhz)
+    {
+        sdmmcFreqKhz = freqKhz;
         return *this;
     }
 };

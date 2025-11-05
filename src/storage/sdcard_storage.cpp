@@ -16,8 +16,8 @@
 #include <sstream>
 
 #include "driver/sdspi_host.h"
-
 #include "lopcore/logging/logger.hpp"
+
 #include "esp_vfs_fat.h"
 #include "sdmmc_cmd.h"
 
@@ -87,8 +87,8 @@ bool SdCardStorage::initialize()
     if (!config_.useSdmmc)
     {
         // SPI mode
-        LOPCORE_LOGI(TAG, "Using SPI mode (MOSI=%d, MISO=%d, CLK=%d, CS=%d)", config_.spiMosi, config_.spiMiso,
-                 config_.spiClk, config_.spiCs);
+        LOPCORE_LOGI(TAG, "Using SPI mode (MOSI=%d, MISO=%d, CLK=%d, CS=%d)", config_.spiMosi,
+                     config_.spiMiso, config_.spiClk, config_.spiCs);
 
         sdmmc_host_t host = SDSPI_HOST_DEFAULT();
 
@@ -123,14 +123,26 @@ bool SdCardStorage::initialize()
     else
     {
         // SDMMC mode
-        LOPCORE_LOGI(TAG, "Using SDMMC mode (%d-bit bus)", config_.sdmmcBusWidth);
+        LOPCORE_LOGI(TAG, "Using SDMMC mode (%d-bit bus, %lu kHz)", config_.sdmmcBusWidth,
+                     (unsigned long) config_.sdmmcFreqKhz);
 
         sdmmc_host_t host = SDMMC_HOST_DEFAULT();
-        
+
+        // Set clock frequency (20MHz default, 40MHz for high-speed cards)
+        host.max_freq_khz = config_.sdmmcFreqKhz;
+
         // Configure slot based on bus width
         sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
         slot_config.width = config_.sdmmcBusWidth;
-        
+
+        // Enable internal pullups if configured
+        // Note: Internal pullups are insufficient, use 10k external pullups for production
+        if (config_.sdmmcEnableInternalPullups)
+        {
+            slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
+            LOPCORE_LOGW(TAG, "Internal pullups enabled (insufficient, use 10k external pullups)");
+        }
+
         // Configure custom pins if specified
         if (config_.sdmmcClk >= 0)
         {

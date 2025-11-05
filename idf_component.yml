@@ -13,6 +13,13 @@ dependencies:
     idf:
         version: ">=5.2.0,<6.0.0"
 
+    # LittleFS support for flash storage (optional)
+    # Enables LittleFsStorage class when available
+    # Component will build without it, excluding littlefs_storage.cpp
+    joltwallet/littlefs:
+        version: ">=1.14.0"
+        require: public # Make it available to parent components
+
     # AWS IoT SDK (optional but recommended for CoreMQTT client)
     # When present, enables CoreMQTT client implementation
     # Provides: coreMQTT, corePKCS11, Device Shadow, Jobs, Fleet Provisioning, etc.

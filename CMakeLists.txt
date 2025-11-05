@@ -22,6 +22,8 @@ set(LOPCORE_SRCS
     # Storage subsystem
     "src/storage/spiffs_storage.cpp"
     "src/storage/nvs_storage.cpp"
+    "src/storage/sdcard_storage.cpp"
+    "src/storage/littlefs_storage.cpp"
 
     # TLS subsystem
     "src/tls/c_wrappers/mbedtls_pkcs11_posix.c"
@@ -65,6 +67,7 @@ set(LOPCORE_INCLUDES
 set(LOPCORE_REQUIRES
     nvs_flash
     spiffs
+    fatfs         # For SD card storage
     esp_wifi
     esp_event
     mqtt          # ESP-IDF native MQTT (for EspMqttClient)
@@ -72,6 +75,7 @@ set(LOPCORE_REQUIRES
     json
     # Note: coreMQTT and corePKCS11 are optional and added dynamically
     # if esp-aws-iot is available (see below)
+    # Note: esp_littlefs is optional and added dynamically if available
     # bt          # Optional: for BLE provisioning
 )
 
@@ -100,6 +104,26 @@ else()
         "src/tls/pkcs11_session.cpp"
         "src/tls/mbedtls_transport.cpp"
         "src/tls/c_wrappers/mbedtls_pkcs11_posix.c"
+    )
+endif()
+
+# Check for esp_littlefs (for LittleFS storage)
+set(ESP_LITTLEFS_AVAILABLE FALSE)
+
+if("esp_littlefs" IN_LIST build_components OR "joltwallet__littlefs" IN_LIST build_components)
+    set(ESP_LITTLEFS_AVAILABLE TRUE)
+    message(STATUS "LopCore: LittleFS component available, adding to requirements")
+    # Add whichever component name is found
+    if("esp_littlefs" IN_LIST build_components)
+        list(APPEND LOPCORE_REQUIRES esp_littlefs)
+    else()
+        list(APPEND LOPCORE_REQUIRES joltwallet__littlefs)
+    endif()
+else()
+    message(STATUS "LopCore: LittleFS NOT available, building without LittleFS storage support")
+    # Remove LittleFS storage source
+    list(REMOVE_ITEM LOPCORE_SRCS
+        "src/storage/littlefs_storage.cpp"
     )
 endif()
 

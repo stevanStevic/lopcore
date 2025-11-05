@@ -16,10 +16,12 @@
 #pragma once
 
 #include <mutex>
+#include <optional>
 #include <string>
+#include <vector>
 
-#include "istorage.hpp"
 #include "storage_config.hpp"
+#include "storage_type.hpp"
 
 namespace lopcore
 {

@@ -53,9 +53,7 @@ SdCardStorage::~SdCardStorage()
         }
 
         // Free SPI bus if we were using SPI mode
-        bool useSpi = (config_.spiMosi >= 0 && config_.spiMiso >= 0 && config_.spiClk >= 0 &&
-                       config_.spiCs >= 0);
-        if (useSpi)
+        if (!config_.useSdmmc)
         {
             spi_bus_free(SPI3_HOST); // Default SPI host for SD card
         }
@@ -85,11 +83,10 @@ bool SdCardStorage::initialize()
                                                      .max_files = static_cast<int>(config_.maxFiles),
                                                      .allocation_unit_size = config_.allocationUnitSize};
 
-    // Check if SPI pins are configured
-    bool useSpi = (config_.spiMosi >= 0 && config_.spiMiso >= 0 && config_.spiClk >= 0 && config_.spiCs >= 0);
-
-    if (useSpi)
+    // Use the explicit useSdmmc flag to determine mode
+    if (!config_.useSdmmc)
     {
+        // SPI mode
         LOPCORE_LOGI(TAG, "Using SPI mode (MOSI=%d, MISO=%d, CLK=%d, CS=%d)", config_.spiMosi, config_.spiMiso,
                  config_.spiClk, config_.spiCs);
 
@@ -125,10 +122,40 @@ bool SdCardStorage::initialize()
     }
     else
     {
-        LOPCORE_LOGI(TAG, "Using SDMMC mode");
+        // SDMMC mode
+        LOPCORE_LOGI(TAG, "Using SDMMC mode (%d-bit bus)", config_.sdmmcBusWidth);
 
         sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+        
+        // Configure slot based on bus width
         sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+        slot_config.width = config_.sdmmcBusWidth;
+        
+        // Configure custom pins if specified
+        if (config_.sdmmcClk >= 0)
+        {
+            slot_config.clk = (gpio_num_t) config_.sdmmcClk;
+        }
+        if (config_.sdmmcCmd >= 0)
+        {
+            slot_config.cmd = (gpio_num_t) config_.sdmmcCmd;
+        }
+        if (config_.sdmmcD0 >= 0)
+        {
+            slot_config.d0 = (gpio_num_t) config_.sdmmcD0;
+        }
+        if (config_.sdmmcD1 >= 0 && config_.sdmmcBusWidth == 4)
+        {
+            slot_config.d1 = (gpio_num_t) config_.sdmmcD1;
+        }
+        if (config_.sdmmcD2 >= 0 && config_.sdmmcBusWidth == 4)
+        {
+            slot_config.d2 = (gpio_num_t) config_.sdmmcD2;
+        }
+        if (config_.sdmmcD3 >= 0 && config_.sdmmcBusWidth == 4)
+        {
+            slot_config.d3 = (gpio_num_t) config_.sdmmcD3;
+        }
 
         esp_err_t ret = esp_vfs_fat_sdmmc_mount(config_.mountPoint.c_str(), &host, &slot_config,
                                                 &mount_config, &card_);

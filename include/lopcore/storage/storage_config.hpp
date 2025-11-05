@@ -137,14 +137,21 @@ struct NvsConfig
 /**
  * @brief SD Card storage configuration
  *
- * Configuration for FAT filesystem on SD card. Use builder pattern:
+ * Configuration for FAT filesystem on SD card. Supports both SPI and SDMMC modes.
+ * Use builder pattern:
  *
  * @code
+ * // SPI mode
  * SdCardConfig config;
  * config.setMountPoint("/sdcard")
- *       .setMaxFiles(5)
- *       .setFormatIfFailed(false)
- *       .setAllocationUnitSize(16 * 1024);
+ *       .setUseSdmmc(false)
+ *       .setSpiPins(11, 13, 12, 10);
+ *
+ * // SDMMC mode (faster, but requires specific pins)
+ * SdCardConfig config;
+ * config.setMountPoint("/sdcard")
+ *       .setUseSdmmc(true)
+ *       .setSdmmcPins(15, 16, 17, 18, 19, 20); // CLK, CMD, D0-D3
  *
  * SdCardStorage storage(config);
  * @endcode
@@ -155,10 +162,22 @@ struct SdCardConfig
     size_t maxFiles = 5;
     bool formatIfFailed = false;
     size_t allocationUnitSize = 16 * 1024; // 16KB default
+    bool useSdmmc = false;                 // Use SDMMC mode (true) or SPI mode (false)
+    
+    // SPI mode pins (used when useSdmmc = false)
     int spiMosi = -1;                      // GPIO pin for MOSI (use -1 for auto/default)
     int spiMiso = -1;                      // GPIO pin for MISO
     int spiClk = -1;                       // GPIO pin for CLK
     int spiCs = -1;                        // GPIO pin for CS
+    
+    // SDMMC mode pins (used when useSdmmc = true)
+    int sdmmcClk = -1;                     // GPIO pin for CLK
+    int sdmmcCmd = -1;                     // GPIO pin for CMD
+    int sdmmcD0 = -1;                      // GPIO pin for D0
+    int sdmmcD1 = -1;                      // GPIO pin for D1 (optional for 1-bit mode)
+    int sdmmcD2 = -1;                      // GPIO pin for D2 (optional for 1-bit mode)
+    int sdmmcD3 = -1;                      // GPIO pin for D3 (optional for 1-bit mode)
+    int sdmmcBusWidth = 4;                 // Bus width: 1 or 4
 
     /**
      * @brief Set SD card mount point
@@ -209,7 +228,19 @@ struct SdCardConfig
     }
 
     /**
-     * @brief Configure SPI pins for SD card
+     * @brief Set SD card interface mode
+     *
+     * @param useSdmmcMode True for SDMMC mode (faster), false for SPI mode
+     * @return Reference to this config for chaining
+     */
+    SdCardConfig &setUseSdmmc(bool useSdmmcMode)
+    {
+        useSdmmc = useSdmmcMode;
+        return *this;
+    }
+
+    /**
+     * @brief Configure SPI pins for SD card (SPI mode only)
      *
      * @param mosi MOSI GPIO pin
      * @param miso MISO GPIO pin
@@ -223,6 +254,53 @@ struct SdCardConfig
         spiMiso = miso;
         spiClk = clk;
         spiCs = cs;
+        useSdmmc = false; // Explicitly set to SPI mode
+        return *this;
+    }
+
+    /**
+     * @brief Configure SDMMC pins for SD card (SDMMC mode only)
+     *
+     * @param clk CLK GPIO pin
+     * @param cmd CMD GPIO pin
+     * @param d0 D0 GPIO pin
+     * @param d1 D1 GPIO pin (use -1 for 1-bit mode)
+     * @param d2 D2 GPIO pin (use -1 for 1-bit mode)
+     * @param d3 D3 GPIO pin (use -1 for 1-bit mode)
+     * @return Reference to this config for chaining
+     */
+    SdCardConfig &setSdmmcPins(int clk, int cmd, int d0, int d1 = -1, int d2 = -1, int d3 = -1)
+    {
+        sdmmcClk = clk;
+        sdmmcCmd = cmd;
+        sdmmcD0 = d0;
+        sdmmcD1 = d1;
+        sdmmcD2 = d2;
+        sdmmcD3 = d3;
+        useSdmmc = true; // Explicitly set to SDMMC mode
+        
+        // Determine bus width based on pins provided
+        if (d1 == -1 && d2 == -1 && d3 == -1)
+        {
+            sdmmcBusWidth = 1; // 1-bit mode
+        }
+        else
+        {
+            sdmmcBusWidth = 4; // 4-bit mode
+        }
+        
+        return *this;
+    }
+
+    /**
+     * @brief Set SDMMC bus width explicitly
+     *
+     * @param width Bus width (1 or 4)
+     * @return Reference to this config for chaining
+     */
+    SdCardConfig &setSdmmcBusWidth(int width)
+    {
+        sdmmcBusWidth = width;
         return *this;
     }
 };

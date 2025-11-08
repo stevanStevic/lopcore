@@ -94,6 +94,18 @@ public:
     bool write(const std::string &key, const std::vector<uint8_t> &data);
 
     /**
+     * @brief Write binary data from C array pointer
+     *
+     * Convenience method for C-style arrays (e.g., uint8_t*, const void*)
+     *
+     * @param key File path relative to base path
+     * @param data Pointer to binary data
+     * @param dataLen Length of data in bytes
+     * @return true if write successful, false otherwise
+     */
+    bool write(const std::string &key, const void *data, size_t dataLen);
+
+    /**
      * @brief Read string data from file
      *
      * @param key File path relative to base path
@@ -155,6 +167,67 @@ public:
     size_t getFreeSize() const;
 
     /**
+     * @brief Check if sufficient space is available
+     *
+     * @param requiredBytes Number of bytes needed
+     * @return true if space available, false otherwise
+     */
+    bool hasSpace(size_t requiredBytes) const;
+
+    /**
+     * @brief Get size of a specific file
+     *
+     * @param key File path relative to base path
+     * @return Optional containing file size, nullopt if file doesn't exist
+     */
+    std::optional<size_t> getFileSize(const std::string &key) const;
+
+    /**
+     * @brief Display filesystem statistics to console
+     *
+     * Logs total, used, and free space information
+     */
+    void displayStats() const;
+
+    /**
+     * @brief List files matching a wildcard pattern
+     *
+     * Supports simple wildcard matching with '*' (e.g., "acc_raw_*.bin")
+     *
+     * @param directory Directory to search (empty for root)
+     * @param pattern Wildcard pattern
+     * @return Vector of matching filenames (not full paths)
+     */
+    std::vector<std::string> listKeysByPattern(const std::string &directory, const std::string &pattern);
+
+    /**
+     * @brief Delete all files matching a pattern
+     *
+     * @param directory Directory to search
+     * @param pattern Wildcard pattern
+     * @return Number of files successfully deleted
+     */
+    size_t removeByPattern(const std::string &directory, const std::string &pattern);
+
+    /**
+     * @brief File information structure
+     */
+    struct FileInfo
+    {
+        std::string name;
+        size_t size;
+        bool isDirectory;
+    };
+
+    /**
+     * @brief List directory with detailed file information
+     *
+     * @param directory Directory to list (empty for root)
+     * @return Vector of file information
+     */
+    std::vector<FileInfo> listDetailed(const std::string &directory = "");
+
+    /**
      * @brief Get storage type
      *
      * @return StorageType::LITTLEFS
@@ -196,6 +269,18 @@ private:
      * @return Full path (e.g., "/littlefs/data.bin")
      */
     std::string getFullPath(const std::string &key) const;
+
+    /**
+     * @brief Simple wildcard pattern matching
+     *
+     * Supports patterns with '*' wildcard (matches any characters)
+     * Example: "acc_raw_*.bin" matches "acc_raw_1.bin", "acc_raw_123.bin", etc.
+     *
+     * @param pattern Pattern string with optional '*' wildcard
+     * @param str String to match against pattern
+     * @return true if matches, false otherwise
+     */
+    static bool patternMatch(const char *pattern, const char *str);
 
     /**
      * @brief Initialize LittleFS if not already initialized

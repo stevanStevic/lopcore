@@ -198,6 +198,43 @@ bool SpiffsStorage::write(const std::string &key, const std::vector<uint8_t> &da
     return true;
 }
 
+bool SpiffsStorage::write(const std::string &key, const void *data, size_t dataLen)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!initialized_)
+    {
+        ESP_LOGE(TAG, "Storage not initialized");
+        return false;
+    }
+
+    if (data == nullptr || dataLen == 0)
+    {
+        ESP_LOGE(TAG, "Invalid data pointer or length");
+        return false;
+    }
+
+    std::string fullPath = getFullPath(key);
+    FILE *file = fopen(fullPath.c_str(), "wb");
+    if (file == nullptr)
+    {
+        ESP_LOGE(TAG, "Failed to open file for writing: %s", fullPath.c_str());
+        return false;
+    }
+
+    size_t written = fwrite(data, 1, dataLen, file);
+    fclose(file);
+
+    if (written != dataLen)
+    {
+        ESP_LOGE(TAG, "Failed to write complete data to: %s", fullPath.c_str());
+        return false;
+    }
+
+    ESP_LOGI(TAG, "Wrote %zu bytes to: %s", written, fullPath.c_str());
+    return true;
+}
+
 std::optional<std::string> SpiffsStorage::read(const std::string &key)
 {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -403,6 +440,239 @@ size_t SpiffsStorage::getUsedSize() const
 size_t SpiffsStorage::getFreeSize() const
 {
     return getTotalSize() - getUsedSize();
+}
+
+bool SpiffsStorage::hasSpace(size_t requiredBytes) const
+{
+    size_t freeSpace = getFreeSize();
+
+    if (freeSpace < requiredBytes)
+    {
+        ESP_LOGE(TAG, "Insufficient space! Need %zu bytes, but only %zu bytes free", requiredBytes,
+                 freeSpace);
+        return false;
+    }
+
+    return true;
+}
+
+std::optional<size_t> SpiffsStorage::getFileSize(const std::string &key) const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!initialized_)
+    {
+        return std::nullopt;
+    }
+
+    std::string fullPath = getFullPath(key);
+    struct stat file_stat;
+
+    if (stat(fullPath.c_str(), &file_stat) != 0)
+    {
+        ESP_LOGI(TAG, "Failed to stat file: %s", fullPath.c_str());
+        return std::nullopt;
+    }
+
+    if (!S_ISREG(file_stat.st_mode))
+    {
+        ESP_LOGE(TAG, "Not a regular file: %s", fullPath.c_str());
+        return std::nullopt;
+    }
+
+    return static_cast<size_t>(file_stat.st_size);
+}
+
+void SpiffsStorage::displayStats() const
+{
+    size_t total = getTotalSize();
+    size_t used = getUsedSize();
+    size_t free = getFreeSize();
+    float usage_percent = total > 0 ? (static_cast<float>(used) / total * 100.0f) : 0.0f;
+
+    ESP_LOGI(TAG, "========================================");
+    ESP_LOGI(TAG, "SPIFFS Filesystem Statistics:");
+    ESP_LOGI(TAG, "  Total size: %.2f MB", total / (1024.0 * 1024.0));
+    ESP_LOGI(TAG, "  Used:       %.2f MB [%.1f%%]", used / (1024.0 * 1024.0), usage_percent);
+    ESP_LOGI(TAG, "  Free:       %.2f MB", free / (1024.0 * 1024.0));
+    ESP_LOGI(TAG, "========================================");
+}
+
+bool SpiffsStorage::patternMatch(const char *pattern, const char *str)
+{
+    const char *star = strchr(pattern, '*');
+
+    if (star == nullptr)
+    {
+        // No wildcard, exact match required
+        return strcmp(pattern, str) == 0;
+    }
+
+    // Match prefix (before *)
+    size_t prefix_len = star - pattern;
+    if (strncmp(pattern, str, prefix_len) != 0)
+    {
+        return false;
+    }
+
+    // Match suffix (after *)
+    const char *suffix = star + 1;
+    size_t suffix_len = strlen(suffix);
+    size_t str_len = strlen(str);
+
+    if (suffix_len > str_len - prefix_len)
+    {
+        return false;
+    }
+
+    return strcmp(str + str_len - suffix_len, suffix) == 0;
+}
+
+std::vector<std::string> SpiffsStorage::listKeysByPattern(const std::string &pattern)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    std::vector<std::string> matchingKeys;
+
+    if (!initialized_)
+    {
+        ESP_LOGE(TAG, "Storage not initialized");
+        return matchingKeys;
+    }
+
+    DIR *dir = opendir(config_.basePath.c_str());
+    if (dir == nullptr)
+    {
+        ESP_LOGE(TAG, "Failed to open directory: %s", config_.basePath.c_str());
+        return matchingKeys;
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != nullptr)
+    {
+        std::string filename = entry->d_name;
+
+        // Skip . and ..
+        if (filename == "." || filename == "..")
+        {
+            continue;
+        }
+
+        // Check if filename matches pattern
+        if (patternMatch(pattern.c_str(), filename.c_str()))
+        {
+            // Verify it's a regular file
+            std::string fullPath = config_.basePath + "/" + filename;
+            struct stat file_stat;
+            if (stat(fullPath.c_str(), &file_stat) == 0 && S_ISREG(file_stat.st_mode))
+            {
+                matchingKeys.push_back(filename);
+            }
+        }
+    }
+
+    closedir(dir);
+    ESP_LOGI(TAG, "Found %zu keys matching pattern '%s'", matchingKeys.size(), pattern.c_str());
+
+    return matchingKeys;
+}
+
+size_t SpiffsStorage::removeByPattern(const std::string &pattern)
+{
+    // Reuse listKeysByPattern to get matching files, then delete them
+    std::vector<std::string> matchingFiles;
+
+    {
+        // Lock is released here, listKeysByPattern will acquire its own lock
+        matchingFiles = listKeysByPattern(pattern);
+    }
+
+    if (matchingFiles.empty())
+    {
+        ESP_LOGI(TAG, "No files matching pattern '%s' to delete", pattern.c_str());
+        return 0;
+    }
+
+    ESP_LOGI(TAG, "Deleting %zu file(s) matching pattern '%s'", matchingFiles.size(), pattern.c_str());
+
+    size_t deletedCount = 0;
+
+    // Now delete each matching file
+    for (const auto &filename : matchingFiles)
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        if (!initialized_)
+        {
+            ESP_LOGE(TAG, "Storage no longer initialized");
+            break;
+        }
+
+        std::string fullPath = config_.basePath + "/" + filename;
+
+        if (::remove(fullPath.c_str()) == 0)
+        {
+            ESP_LOGI(TAG, "Deleted: %s", filename.c_str());
+            deletedCount++;
+        }
+        else
+        {
+            ESP_LOGE(TAG, "Failed to delete: %s", filename.c_str());
+        }
+    }
+
+    ESP_LOGI(TAG, "Deletion complete: %zu/%zu files deleted", deletedCount, matchingFiles.size());
+
+    return deletedCount;
+}
+
+std::vector<SpiffsStorage::FileInfo> SpiffsStorage::listDetailed()
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    std::vector<FileInfo> files;
+
+    if (!initialized_)
+    {
+        ESP_LOGE(TAG, "Storage not initialized");
+        return files;
+    }
+
+    DIR *dir = opendir(config_.basePath.c_str());
+    if (dir == nullptr)
+    {
+        ESP_LOGE(TAG, "Failed to open directory: %s", config_.basePath.c_str());
+        return files;
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != nullptr)
+    {
+        std::string filename = entry->d_name;
+
+        // Skip . and ..
+        if (filename == "." || filename == "..")
+        {
+            continue;
+        }
+
+        std::string fullPath = config_.basePath + "/" + filename;
+        struct stat file_stat;
+
+        if (stat(fullPath.c_str(), &file_stat) == 0)
+        {
+            FileInfo info;
+            info.name = filename;
+            info.isDirectory = S_ISDIR(file_stat.st_mode);
+            info.size = S_ISREG(file_stat.st_mode) ? static_cast<size_t>(file_stat.st_size) : 0;
+            files.push_back(info);
+        }
+    }
+
+    closedir(dir);
+    ESP_LOGI(TAG, "Found %zu entries", files.size());
+
+    return files;
 }
 
 bool SpiffsStorage::format()

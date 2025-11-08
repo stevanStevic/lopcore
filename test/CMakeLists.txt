@@ -70,6 +70,13 @@ gtest_discover_tests(test_dummy)
 gtest_discover_tests(test_logger)
 gtest_discover_tests(test_file_sink)
 
+add_executable(test_littlefs_storage
+    unit/test_littlefs_storage.cpp
+    ${LOPCORE_BASE_DIR}/src/storage/littlefs_storage.cpp
+)
+target_link_libraries(test_littlefs_storage GTest::gtest_main pthread)
+gtest_discover_tests(test_littlefs_storage)
+
 add_executable(test_spiffs_storage
     unit/test_spiffs_storage.cpp
     ${LOPCORE_BASE_DIR}/src/storage/spiffs_storage.cpp
@@ -84,14 +91,13 @@ add_executable(test_nvs_storage
 target_link_libraries(test_nvs_storage GTest::gtest_main pthread)
 gtest_discover_tests(test_nvs_storage)
 
-add_executable(test_storage_factory
-    unit/test_storage_factory.cpp
-    ${LOPCORE_BASE_DIR}/src/storage/storage_factory.cpp
+add_executable(test_storage_traits
+    unit/storage/test_storage_traits.cpp
     ${LOPCORE_BASE_DIR}/src/storage/spiffs_storage.cpp
     ${LOPCORE_BASE_DIR}/src/storage/nvs_storage.cpp
 )
-target_link_libraries(test_storage_factory GTest::gtest_main pthread)
-gtest_discover_tests(test_storage_factory)
+target_link_libraries(test_storage_traits GTest::gtest_main pthread)
+gtest_discover_tests(test_storage_traits)
 
 add_executable(test_state_machine
     unit/state_machine/test_state_machine.cpp

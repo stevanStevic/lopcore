@@ -88,6 +88,7 @@ public:
     // Storage interface methods
     bool write(const std::string &key, const std::string &data);
     bool write(const std::string &key, const std::vector<uint8_t> &data);
+    bool write(const std::string &key, const void *data, size_t dataLen);
     std::optional<std::string> read(const std::string &key);
     std::optional<std::vector<uint8_t>> readBinary(const std::string &key);
     bool exists(const std::string &key);
@@ -96,6 +97,61 @@ public:
     size_t getTotalSize() const;
     size_t getUsedSize() const;
     size_t getFreeSize() const;
+
+    /**
+     * @brief Check if sufficient space is available
+     *
+     * @param requiredBytes Number of bytes needed
+     * @return true if space available, false otherwise
+     */
+    bool hasSpace(size_t requiredBytes) const;
+
+    /**
+     * @brief Get size of a specific file
+     *
+     * @param key File path relative to base path
+     * @return Optional containing file size, nullopt if file doesn't exist
+     */
+    std::optional<size_t> getFileSize(const std::string &key) const;
+
+    /**
+     * @brief Display filesystem statistics to console
+     */
+    void displayStats() const;
+
+    /**
+     * @brief List files matching a wildcard pattern
+     *
+     * @param pattern Wildcard pattern (e.g., "acc_raw_*.bin")
+     * @return Vector of matching filenames
+     */
+    std::vector<std::string> listKeysByPattern(const std::string &pattern);
+
+    /**
+     * @brief Delete all files matching a pattern
+     *
+     * @param pattern Wildcard pattern
+     * @return Number of files successfully deleted
+     */
+    size_t removeByPattern(const std::string &pattern);
+
+    /**
+     * @brief File information structure
+     */
+    struct FileInfo
+    {
+        std::string name;
+        size_t size;
+        bool isDirectory;
+    };
+
+    /**
+     * @brief List directory with detailed file information
+     *
+     * @return Vector of file information
+     */
+    std::vector<FileInfo> listDetailed();
+
     StorageType getType() const
     {
         return StorageType::SPIFFS;
@@ -143,6 +199,15 @@ private:
      * @return Full path (e.g., "/spiffs/config.json")
      */
     std::string getFullPath(const std::string &key) const;
+
+    /**
+     * @brief Simple wildcard pattern matching
+     *
+     * @param pattern Pattern string with optional '*' wildcard
+     * @param str String to match against pattern
+     * @return true if matches, false otherwise
+     */
+    static bool patternMatch(const char *pattern, const char *str);
 
     /**
      * @brief Initialize SPIFFS if not already initialized

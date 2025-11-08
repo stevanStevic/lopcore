@@ -18,6 +18,8 @@ protected:
     void SetUp() override
     {
         storage = std::make_unique<NvsStorage>("test_namespace");
+        // Initialize the storage
+        ASSERT_TRUE(storage->initialize()) << "Failed to initialize NVS storage";
     }
 
     void TearDown() override

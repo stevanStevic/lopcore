@@ -136,6 +136,13 @@ public:
         return config_.namespaceName;
     }
 
+    /**
+     * @brief Initialize NVS flash if not already initialized
+     *
+     * @return true if initialization succeeded, false otherwise
+     */
+    bool initialize();
+
 private:
     storage::NvsConfig config_; ///< NVS configuration
     mutable std::mutex mutex_;  ///< Mutex for thread safety
@@ -156,13 +163,6 @@ private:
      */
     void closeHandle();
 #endif
-
-    /**
-     * @brief Initialize NVS flash if not already initialized
-     *
-     * @return true if initialization succeeded, false otherwise
-     */
-    bool initialize();
 
     /**
      * @brief Validate key length (NVS keys must be <= 15 characters)

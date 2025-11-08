@@ -257,6 +257,13 @@ public:
         return initialized_;
     }
 
+    /**
+     * @brief Initialize LittleFS if not already initialized
+     *
+     * @return true if initialization succeeded, false otherwise
+     */
+    bool initialize();
+
 private:
     storage::LittleFsConfig config_; ///< LittleFS configuration
     bool initialized_;               ///< Whether LittleFS was successfully mounted
@@ -281,13 +288,6 @@ private:
      * @return true if matches, false otherwise
      */
     static bool patternMatch(const char *pattern, const char *str);
-
-    /**
-     * @brief Initialize LittleFS if not already initialized
-     *
-     * @return true if initialization succeeded, false otherwise
-     */
-    bool initialize();
 
     /**
      * @brief Check if LittleFS is already mounted

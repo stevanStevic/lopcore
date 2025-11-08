@@ -187,6 +187,13 @@ public:
         return initialized_;
     }
 
+    /**
+     * @brief Initialize SD card if not already initialized
+     *
+     * @return true if initialization succeeded, false otherwise
+     */
+    bool initialize();
+
 private:
     storage::SdCardConfig config_; ///< SD card configuration
     bool initialized_;             ///< Whether SD card was successfully mounted
@@ -203,13 +210,6 @@ private:
      * @return Full path (e.g., "/sdcard/config.json")
      */
     std::string getFullPath(const std::string &key) const;
-
-    /**
-     * @brief Initialize SD card if not already initialized
-     *
-     * @return true if initialization succeeded, false otherwise
-     */
-    bool initialize();
 };
 
 } // namespace lopcore

@@ -37,13 +37,7 @@ namespace lopcore
 
 SpiffsStorage::SpiffsStorage(const storage::SpiffsConfig &config) : config_(config), initialized_(false)
 {
-    initialized_ = initialize();
-}
-
-SpiffsStorage::SpiffsStorage(const std::string &basePath)
-    : config_(storage::SpiffsConfig(basePath)), initialized_(false)
-{
-    initialized_ = initialize();
+    // Don't auto-initialize - let user call initialize() explicitly
 }
 
 SpiffsStorage::~SpiffsStorage()

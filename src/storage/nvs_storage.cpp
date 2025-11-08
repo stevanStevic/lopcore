@@ -42,7 +42,7 @@ NvsStorage::NvsStorage(const storage::NvsConfig &config)
       handle_(0)
 #endif
 {
-    initialized_ = initialize();
+    // Don't auto-initialize - let user call initialize() explicitly
 }
 
 NvsStorage::NvsStorage(const std::string &namespaceName)
@@ -52,7 +52,7 @@ NvsStorage::NvsStorage(const std::string &namespaceName)
       handle_(0)
 #endif
 {
-    initialized_ = initialize();
+    // Don't auto-initialize - let user call initialize() explicitly
 }
 
 NvsStorage::~NvsStorage()

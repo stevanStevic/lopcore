@@ -34,8 +34,8 @@ extern "C" void app_main(void)
     LOPCORE_LOGI(TAG, "===========================================");
     LOPCORE_LOGI(TAG, "LopCore Storage Basics Example");
     LOPCORE_LOGI(TAG, "===========================================");
-    LOPCORE_LOGI(TAG, "Note: NVS and SPIFFS are automatically initialized by storage classes");
-    LOPCORE_LOGI(TAG, "      using configuration provided in constructors");
+    LOPCORE_LOGI(TAG, "Note: Storage classes require explicit initialize() call");
+    LOPCORE_LOGI(TAG, "      after construction with configuration");
 
     // =========================================================================
     // NVS Storage Example (for configuration)
@@ -54,6 +54,14 @@ extern "C" void app_main(void)
     LOPCORE_LOGI(TAG, "  Read-only: %s", nvsConfig.readOnly ? "true" : "false");
 
     lopcore::NvsStorage nvsStorage(nvsConfig);
+
+    // Initialize NVS storage
+    if (!nvsStorage.initialize())
+    {
+        LOPCORE_LOGE(TAG, "Failed to initialize NVS storage!");
+        return;
+    }
+    LOPCORE_LOGI(TAG, "NVS storage initialized successfully");
 
     // Write configuration
     LOPCORE_LOGI(TAG, "Writing configuration to NVS...");
@@ -107,6 +115,14 @@ extern "C" void app_main(void)
     LOPCORE_LOGI(TAG, "  Format if failed: %s", spiffsConfig.formatIfFailed ? "true" : "false");
 
     lopcore::SpiffsStorage spiffsStorage(spiffsConfig);
+
+    // Initialize SPIFFS storage
+    if (!spiffsStorage.initialize())
+    {
+        LOPCORE_LOGE(TAG, "Failed to initialize SPIFFS storage!");
+        return;
+    }
+    LOPCORE_LOGI(TAG, "SPIFFS storage initialized successfully");
 
     // Write a configuration file
     LOPCORE_LOGI(TAG, "Writing JSON config file...");

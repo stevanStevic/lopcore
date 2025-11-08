@@ -29,6 +29,8 @@ protected:
         testPath = "/tmp/lopcore_spiffs_test";
         mkdir(testPath.c_str(), 0755);
         storage = std::make_unique<SpiffsStorage>(testPath);
+        // Initialize the storage
+        ASSERT_TRUE(storage->initialize()) << "Failed to initialize SPIFFS storage";
     }
 
     void TearDown() override

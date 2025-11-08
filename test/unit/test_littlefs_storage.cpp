@@ -36,6 +36,8 @@ protected:
         // Note: This will fail on host without actual LittleFS support
         // Tests should be run on ESP32 hardware or with LittleFS mocked
         storage = std::make_unique<LittleFsStorage>(config);
+        // Initialize the storage
+        ASSERT_TRUE(storage->initialize()) << "Failed to initialize LittleFS storage";
     }
 
     void TearDown() override

@@ -27,7 +27,7 @@ namespace lopcore
 {
 
 /**
- * @brief SPIFFS implementation of IStorage interface
+ * @brief SPIFFS storage implementation
  *
  * Provides file-based storage using ESP-IDF's SPIFFS (SPI Flash File System).
  * Thread-safe: All operations are protected by mutex.
@@ -67,18 +67,6 @@ public:
      * @endcode
      */
     explicit SpiffsStorage(const storage::SpiffsConfig &config);
-
-    /**
-     * @brief Construct SPIFFS storage with base path (DEPRECATED - use config constructor)
-     *
-     * @param basePath Mount point for SPIFFS (default: "/spiffs")
-     *
-     * @deprecated Use SpiffsStorage(const SpiffsConfig&) instead
-     * @note Automatically initializes SPIFFS if not already initialized
-     * @note Will format SPIFFS if mount fails and format_if_mount_failed is true
-     */
-    [[deprecated("Use SpiffsStorage(const SpiffsConfig&) constructor instead")]] explicit SpiffsStorage(
-        const std::string &basePath = "/spiffs");
 
     /**
      * @brief Destructor - unmounts SPIFFS if this was the initializer
@@ -187,6 +175,20 @@ public:
         return config_.basePath;
     }
 
+    /**
+     * @brief Initialize SPIFFS if not already initialized
+     *
+     * @return true if initialization succeeded, false otherwise
+     */
+    bool initialize();
+
+    /**
+     * @brief Check if SPIFFS is mounted
+     *
+     * @return true if mounted, false otherwise
+     */
+    bool isMounted() const;
+
 private:
     storage::SpiffsConfig config_; ///< SPIFFS configuration
     bool initialized_;             ///< Whether SPIFFS was initialized by this instance
@@ -208,20 +210,6 @@ private:
      * @return true if matches, false otherwise
      */
     static bool patternMatch(const char *pattern, const char *str);
-
-    /**
-     * @brief Initialize SPIFFS if not already initialized
-     *
-     * @return true if initialization succeeded, false otherwise
-     */
-    bool initialize();
-
-    /**
-     * @brief Check if SPIFFS is already mounted
-     *
-     * @return true if mounted, false otherwise
-     */
-    bool isMounted() const;
 };
 
 } // namespace lopcore

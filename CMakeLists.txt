@@ -93,8 +93,8 @@ set(ESP_AWS_IOT_AVAILABLE FALSE)
 
 if("coreMQTT" IN_LIST build_components OR "corePKCS11" IN_LIST build_components)
     set(ESP_AWS_IOT_AVAILABLE TRUE)
-    message(STATUS "LopCore: esp-aws-iot available, adding coreMQTT/corePKCS11 to requirements")
-    list(APPEND LOPCORE_REQUIRES coreMQTT corePKCS11)
+    message(STATUS "LopCore: esp-aws-iot available, adding coreMQTT/corePKCS11/backoffAlgorithm to requirements")
+    list(APPEND LOPCORE_REQUIRES coreMQTT corePKCS11 backoffAlgorithm)
 else()
     message(STATUS "LopCore: esp-aws-iot NOT available, building without CoreMQTT support")
     # Remove sources that depend on esp-aws-iot libraries
@@ -165,6 +165,7 @@ if(ESP_AWS_IOT_AVAILABLE)
             "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/coreMQTT/source/core_mqtt.c"
             "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/coreMQTT/source/core_mqtt_state.c"
             "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/coreMQTT/source/core_mqtt_serializer.c"
+            "${ESP_AWS_IOT_PATH}/libraries/backoffAlgorithm/backoffAlgorithm/source/backoff_algorithm.c"
         )
 
         # Add esp-aws-iot include directories for coreMQTT and corePKCS11

@@ -83,10 +83,12 @@ bool NvsStorage::initialize()
     }
 
     ESP_LOGI(TAG, "NVS initialized with namespace: %s", config_.namespaceName.c_str());
+    initialized_ = true;
     return true;
 #else
     // Host: Mock initialization
     ESP_LOGI(TAG, "NVS initialized (mock) with namespace: %s", config_.namespaceName.c_str());
+    initialized_ = true;
     return true;
 #endif
 }

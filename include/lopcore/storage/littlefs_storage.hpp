@@ -146,6 +146,15 @@ public:
     bool remove(const std::string &key);
 
     /**
+     * @brief Create a directory
+     *
+     * @param path Directory path relative to base path
+     * @param recursive If true, creates parent directories as needed (like mkdir -p)
+     * @return true if directory created successfully or already exists, false otherwise
+     */
+    bool mkdir(const std::string &path, bool recursive = false);
+
+    /**
      * @brief Get total storage size in bytes
      *
      * @return Total size in bytes

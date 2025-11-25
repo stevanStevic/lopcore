@@ -416,6 +416,69 @@ bool SdCardStorage::remove(const std::string &key)
     return true;
 }
 
+bool SdCardStorage::mkdir(const std::string &path, bool recursive)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!initialized_)
+    {
+        LOPCORE_LOGE(TAG, "Cannot create directory: storage not initialized");
+        return false;
+    }
+
+    std::string fullPath = config_.mountPoint + "/" + path;
+
+    if (recursive)
+    {
+        // Create parent directories recursively
+        std::string currentPath = config_.mountPoint;
+        std::istringstream pathStream(path);
+        std::string segment;
+
+        while (std::getline(pathStream, segment, '/'))
+        {
+            if (segment.empty())
+            {
+                continue;
+            }
+
+            currentPath += "/" + segment;
+
+            struct stat st;
+            if (stat(currentPath.c_str(), &st) != 0)
+            {
+                if (::mkdir(currentPath.c_str(), 0755) != 0)
+                {
+                    LOPCORE_LOGE(TAG, "Failed to create directory: %s", currentPath.c_str());
+                    return false;
+                }
+                LOPCORE_LOGD(TAG, "Created directory: %s", currentPath.c_str());
+            }
+        }
+        return true;
+    }
+    else
+    {
+        // Create single directory (parent must exist)
+        struct stat st;
+        if (stat(fullPath.c_str(), &st) == 0)
+        {
+            // Already exists
+            LOPCORE_LOGD(TAG, "Directory already exists: %s", fullPath.c_str());
+            return true;
+        }
+
+        if (::mkdir(fullPath.c_str(), 0755) != 0)
+        {
+            LOPCORE_LOGE(TAG, "Failed to create directory: %s", fullPath.c_str());
+            return false;
+        }
+
+        LOPCORE_LOGD(TAG, "Created directory: %s", fullPath.c_str());
+        return true;
+    }
+}
+
 // ============================================================================
 // Storage Information
 // ============================================================================

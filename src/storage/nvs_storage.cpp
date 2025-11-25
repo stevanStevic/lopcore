@@ -10,6 +10,7 @@
  */
 
 #include "lopcore/storage/nvs_storage.hpp"
+
 #include "lopcore/logging/logger.hpp"
 
 #ifndef ESP_PLATFORM
@@ -581,6 +582,832 @@ bool NvsStorage::commit()
     // Host mock - no-op
     LOPCORE_LOGI(TAG, "Committed NVS changes [MOCK]");
     return true;
+#endif
+}
+
+// ============================================================================
+// Type-specific write methods
+// ============================================================================
+
+bool NvsStorage::writeInt8(const std::string &key, int8_t value)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!initialized_)
+    {
+        LOPCORE_LOGE(TAG, "Storage not initialized");
+        return false;
+    }
+
+    if (!isValidKey(key))
+    {
+        return false;
+    }
+
+#ifdef ESP_PLATFORM
+    if (!openHandle())
+    {
+        return false;
+    }
+
+    esp_err_t ret = nvs_set_i8(handle_, key.c_str(), value);
+    if (ret != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "Failed to write int8 key '%s': %d", key.c_str(), ret);
+        return false;
+    }
+
+    ret = nvs_commit(handle_);
+    if (ret != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "Failed to commit NVS: %d", ret);
+        return false;
+    }
+
+    LOPCORE_LOGD(TAG, "Wrote int8 key '%s': %d", key.c_str(), value);
+    return true;
+#else
+    std::vector<uint8_t> data(reinterpret_cast<const uint8_t *>(&value),
+                              reinterpret_cast<const uint8_t *>(&value) + sizeof(value));
+    g_nvsData[config_.namespaceName][key] = data;
+    LOPCORE_LOGD(TAG, "Wrote int8 key '%s': %d [MOCK]", key.c_str(), value);
+    return true;
+#endif
+}
+
+bool NvsStorage::writeUint8(const std::string &key, uint8_t value)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!initialized_)
+    {
+        LOPCORE_LOGE(TAG, "Storage not initialized");
+        return false;
+    }
+
+    if (!isValidKey(key))
+    {
+        return false;
+    }
+
+#ifdef ESP_PLATFORM
+    if (!openHandle())
+    {
+        return false;
+    }
+
+    esp_err_t ret = nvs_set_u8(handle_, key.c_str(), value);
+    if (ret != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "Failed to write uint8 key '%s': %d", key.c_str(), ret);
+        return false;
+    }
+
+    ret = nvs_commit(handle_);
+    if (ret != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "Failed to commit NVS: %d", ret);
+        return false;
+    }
+
+    LOPCORE_LOGD(TAG, "Wrote uint8 key '%s': %u", key.c_str(), value);
+    return true;
+#else
+    std::vector<uint8_t> data(reinterpret_cast<const uint8_t *>(&value),
+                              reinterpret_cast<const uint8_t *>(&value) + sizeof(value));
+    g_nvsData[config_.namespaceName][key] = data;
+    LOPCORE_LOGD(TAG, "Wrote uint8 key '%s': %u [MOCK]", key.c_str(), value);
+    return true;
+#endif
+}
+
+bool NvsStorage::writeInt16(const std::string &key, int16_t value)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!initialized_)
+    {
+        LOPCORE_LOGE(TAG, "Storage not initialized");
+        return false;
+    }
+
+    if (!isValidKey(key))
+    {
+        return false;
+    }
+
+#ifdef ESP_PLATFORM
+    if (!openHandle())
+    {
+        return false;
+    }
+
+    esp_err_t ret = nvs_set_i16(handle_, key.c_str(), value);
+    if (ret != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "Failed to write int16 key '%s': %d", key.c_str(), ret);
+        return false;
+    }
+
+    ret = nvs_commit(handle_);
+    if (ret != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "Failed to commit NVS: %d", ret);
+        return false;
+    }
+
+    LOPCORE_LOGD(TAG, "Wrote int16 key '%s': %d", key.c_str(), value);
+    return true;
+#else
+    std::vector<uint8_t> data(reinterpret_cast<const uint8_t *>(&value),
+                              reinterpret_cast<const uint8_t *>(&value) + sizeof(value));
+    g_nvsData[config_.namespaceName][key] = data;
+    LOPCORE_LOGD(TAG, "Wrote int16 key '%s': %d [MOCK]", key.c_str(), value);
+    return true;
+#endif
+}
+
+bool NvsStorage::writeUint16(const std::string &key, uint16_t value)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!initialized_)
+    {
+        LOPCORE_LOGE(TAG, "Storage not initialized");
+        return false;
+    }
+
+    if (!isValidKey(key))
+    {
+        return false;
+    }
+
+#ifdef ESP_PLATFORM
+    if (!openHandle())
+    {
+        return false;
+    }
+
+    esp_err_t ret = nvs_set_u16(handle_, key.c_str(), value);
+    if (ret != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "Failed to write uint16 key '%s': %d", key.c_str(), ret);
+        return false;
+    }
+
+    ret = nvs_commit(handle_);
+    if (ret != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "Failed to commit NVS: %d", ret);
+        return false;
+    }
+
+    LOPCORE_LOGD(TAG, "Wrote uint16 key '%s': %u", key.c_str(), value);
+    return true;
+#else
+    std::vector<uint8_t> data(reinterpret_cast<const uint8_t *>(&value),
+                              reinterpret_cast<const uint8_t *>(&value) + sizeof(value));
+    g_nvsData[config_.namespaceName][key] = data;
+    LOPCORE_LOGD(TAG, "Wrote uint16 key '%s': %u [MOCK]", key.c_str(), value);
+    return true;
+#endif
+}
+
+bool NvsStorage::writeInt32(const std::string &key, int32_t value)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!initialized_)
+    {
+        LOPCORE_LOGE(TAG, "Storage not initialized");
+        return false;
+    }
+
+    if (!isValidKey(key))
+    {
+        return false;
+    }
+
+#ifdef ESP_PLATFORM
+    if (!openHandle())
+    {
+        return false;
+    }
+
+    esp_err_t ret = nvs_set_i32(handle_, key.c_str(), value);
+    if (ret != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "Failed to write int32 key '%s': %d", key.c_str(), ret);
+        return false;
+    }
+
+    ret = nvs_commit(handle_);
+    if (ret != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "Failed to commit NVS: %d", ret);
+        return false;
+    }
+
+    LOPCORE_LOGD(TAG, "Wrote int32 key '%s': %d", key.c_str(), static_cast<int>(value));
+    return true;
+#else
+    std::vector<uint8_t> data(reinterpret_cast<const uint8_t *>(&value),
+                              reinterpret_cast<const uint8_t *>(&value) + sizeof(value));
+    g_nvsData[config_.namespaceName][key] = data;
+    LOPCORE_LOGD(TAG, "Wrote int32 key '%s': %d [MOCK]", key.c_str(), static_cast<int>(value));
+    return true;
+#endif
+}
+
+bool NvsStorage::writeUint32(const std::string &key, uint32_t value)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!initialized_)
+    {
+        LOPCORE_LOGE(TAG, "Storage not initialized");
+        return false;
+    }
+
+    if (!isValidKey(key))
+    {
+        return false;
+    }
+
+#ifdef ESP_PLATFORM
+    if (!openHandle())
+    {
+        return false;
+    }
+
+    esp_err_t ret = nvs_set_u32(handle_, key.c_str(), value);
+    if (ret != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "Failed to write uint32 key '%s': %d", key.c_str(), ret);
+        return false;
+    }
+
+    ret = nvs_commit(handle_);
+    if (ret != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "Failed to commit NVS: %d", ret);
+        return false;
+    }
+
+    LOPCORE_LOGD(TAG, "Wrote uint32 key '%s': %u", key.c_str(), static_cast<unsigned>(value));
+    return true;
+#else
+    std::vector<uint8_t> data(reinterpret_cast<const uint8_t *>(&value),
+                              reinterpret_cast<const uint8_t *>(&value) + sizeof(value));
+    g_nvsData[config_.namespaceName][key] = data;
+    LOPCORE_LOGD(TAG, "Wrote uint32 key '%s': %u [MOCK]", key.c_str(), static_cast<unsigned>(value));
+    return true;
+#endif
+}
+
+bool NvsStorage::writeInt64(const std::string &key, int64_t value)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!initialized_)
+    {
+        LOPCORE_LOGE(TAG, "Storage not initialized");
+        return false;
+    }
+
+    if (!isValidKey(key))
+    {
+        return false;
+    }
+
+#ifdef ESP_PLATFORM
+    if (!openHandle())
+    {
+        return false;
+    }
+
+    esp_err_t ret = nvs_set_i64(handle_, key.c_str(), value);
+    if (ret != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "Failed to write int64 key '%s': %d", key.c_str(), ret);
+        return false;
+    }
+
+    ret = nvs_commit(handle_);
+    if (ret != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "Failed to commit NVS: %d", ret);
+        return false;
+    }
+
+    LOPCORE_LOGD(TAG, "Wrote int64 key '%s': %lld", key.c_str(), static_cast<long long>(value));
+    return true;
+#else
+    std::vector<uint8_t> data(reinterpret_cast<const uint8_t *>(&value),
+                              reinterpret_cast<const uint8_t *>(&value) + sizeof(value));
+    g_nvsData[config_.namespaceName][key] = data;
+    LOPCORE_LOGD(TAG, "Wrote int64 key '%s': %lld [MOCK]", key.c_str(), static_cast<long long>(value));
+    return true;
+#endif
+}
+
+bool NvsStorage::writeUint64(const std::string &key, uint64_t value)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!initialized_)
+    {
+        LOPCORE_LOGE(TAG, "Storage not initialized");
+        return false;
+    }
+
+    if (!isValidKey(key))
+    {
+        return false;
+    }
+
+#ifdef ESP_PLATFORM
+    if (!openHandle())
+    {
+        return false;
+    }
+
+    esp_err_t ret = nvs_set_u64(handle_, key.c_str(), value);
+    if (ret != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "Failed to write uint64 key '%s': %d", key.c_str(), ret);
+        return false;
+    }
+
+    ret = nvs_commit(handle_);
+    if (ret != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "Failed to commit NVS: %d", ret);
+        return false;
+    }
+
+    LOPCORE_LOGD(TAG, "Wrote uint64 key '%s': %llu", key.c_str(), static_cast<unsigned long long>(value));
+    return true;
+#else
+    std::vector<uint8_t> data(reinterpret_cast<const uint8_t *>(&value),
+                              reinterpret_cast<const uint8_t *>(&value) + sizeof(value));
+    g_nvsData[config_.namespaceName][key] = data;
+    LOPCORE_LOGD(TAG, "Wrote uint64 key '%s': %llu [MOCK]", key.c_str(),
+                 static_cast<unsigned long long>(value));
+    return true;
+#endif
+}
+
+// ============================================================================
+// Type-specific read methods
+// ============================================================================
+
+std::optional<int8_t> NvsStorage::readInt8(const std::string &key)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!initialized_)
+    {
+        LOPCORE_LOGE(TAG, "Storage not initialized");
+        return std::nullopt;
+    }
+
+    if (!isValidKey(key))
+    {
+        return std::nullopt;
+    }
+
+#ifdef ESP_PLATFORM
+    if (!openHandle())
+    {
+        return std::nullopt;
+    }
+
+    int8_t value;
+    esp_err_t ret = nvs_get_i8(handle_, key.c_str(), &value);
+    if (ret == ESP_ERR_NVS_NOT_FOUND)
+    {
+        LOPCORE_LOGD(TAG, "Key not found: '%s'", key.c_str());
+        return std::nullopt;
+    }
+    else if (ret != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "Failed to read int8 key '%s': %d", key.c_str(), ret);
+        return std::nullopt;
+    }
+
+    LOPCORE_LOGD(TAG, "Read int8 key '%s': %d", key.c_str(), value);
+    return value;
+#else
+    auto nsIt = g_nvsData.find(config_.namespaceName);
+    if (nsIt == g_nvsData.end())
+    {
+        return std::nullopt;
+    }
+
+    auto keyIt = nsIt->second.find(key);
+    if (keyIt == nsIt->second.end() || keyIt->second.size() != sizeof(int8_t))
+    {
+        return std::nullopt;
+    }
+
+    int8_t value;
+    std::memcpy(&value, keyIt->second.data(), sizeof(int8_t));
+    LOPCORE_LOGD(TAG, "Read int8 key '%s': %d [MOCK]", key.c_str(), value);
+    return value;
+#endif
+}
+
+std::optional<uint8_t> NvsStorage::readUint8(const std::string &key)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!initialized_)
+    {
+        LOPCORE_LOGE(TAG, "Storage not initialized");
+        return std::nullopt;
+    }
+
+    if (!isValidKey(key))
+    {
+        return std::nullopt;
+    }
+
+#ifdef ESP_PLATFORM
+    if (!openHandle())
+    {
+        return std::nullopt;
+    }
+
+    uint8_t value;
+    esp_err_t ret = nvs_get_u8(handle_, key.c_str(), &value);
+    if (ret == ESP_ERR_NVS_NOT_FOUND)
+    {
+        LOPCORE_LOGD(TAG, "Key not found: '%s'", key.c_str());
+        return std::nullopt;
+    }
+    else if (ret != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "Failed to read uint8 key '%s': %d", key.c_str(), ret);
+        return std::nullopt;
+    }
+
+    LOPCORE_LOGD(TAG, "Read uint8 key '%s': %u", key.c_str(), value);
+    return value;
+#else
+    auto nsIt = g_nvsData.find(config_.namespaceName);
+    if (nsIt == g_nvsData.end())
+    {
+        return std::nullopt;
+    }
+
+    auto keyIt = nsIt->second.find(key);
+    if (keyIt == nsIt->second.end() || keyIt->second.size() != sizeof(uint8_t))
+    {
+        return std::nullopt;
+    }
+
+    uint8_t value;
+    std::memcpy(&value, keyIt->second.data(), sizeof(uint8_t));
+    LOPCORE_LOGD(TAG, "Read uint8 key '%s': %u [MOCK]", key.c_str(), value);
+    return value;
+#endif
+}
+
+std::optional<int16_t> NvsStorage::readInt16(const std::string &key)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!initialized_)
+    {
+        LOPCORE_LOGE(TAG, "Storage not initialized");
+        return std::nullopt;
+    }
+
+    if (!isValidKey(key))
+    {
+        return std::nullopt;
+    }
+
+#ifdef ESP_PLATFORM
+    if (!openHandle())
+    {
+        return std::nullopt;
+    }
+
+    int16_t value;
+    esp_err_t ret = nvs_get_i16(handle_, key.c_str(), &value);
+    if (ret == ESP_ERR_NVS_NOT_FOUND)
+    {
+        LOPCORE_LOGD(TAG, "Key not found: '%s'", key.c_str());
+        return std::nullopt;
+    }
+    else if (ret != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "Failed to read int16 key '%s': %d", key.c_str(), ret);
+        return std::nullopt;
+    }
+
+    LOPCORE_LOGD(TAG, "Read int16 key '%s': %d", key.c_str(), value);
+    return value;
+#else
+    auto nsIt = g_nvsData.find(config_.namespaceName);
+    if (nsIt == g_nvsData.end())
+    {
+        return std::nullopt;
+    }
+
+    auto keyIt = nsIt->second.find(key);
+    if (keyIt == nsIt->second.end() || keyIt->second.size() != sizeof(int16_t))
+    {
+        return std::nullopt;
+    }
+
+    int16_t value;
+    std::memcpy(&value, keyIt->second.data(), sizeof(int16_t));
+    LOPCORE_LOGD(TAG, "Read int16 key '%s': %d [MOCK]", key.c_str(), value);
+    return value;
+#endif
+}
+
+std::optional<uint16_t> NvsStorage::readUint16(const std::string &key)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!initialized_)
+    {
+        LOPCORE_LOGE(TAG, "Storage not initialized");
+        return std::nullopt;
+    }
+
+    if (!isValidKey(key))
+    {
+        return std::nullopt;
+    }
+
+#ifdef ESP_PLATFORM
+    if (!openHandle())
+    {
+        return std::nullopt;
+    }
+
+    uint16_t value;
+    esp_err_t ret = nvs_get_u16(handle_, key.c_str(), &value);
+    if (ret == ESP_ERR_NVS_NOT_FOUND)
+    {
+        LOPCORE_LOGD(TAG, "Key not found: '%s'", key.c_str());
+        return std::nullopt;
+    }
+    else if (ret != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "Failed to read uint16 key '%s': %d", key.c_str(), ret);
+        return std::nullopt;
+    }
+
+    LOPCORE_LOGD(TAG, "Read uint16 key '%s': %u", key.c_str(), value);
+    return value;
+#else
+    auto nsIt = g_nvsData.find(config_.namespaceName);
+    if (nsIt == g_nvsData.end())
+    {
+        return std::nullopt;
+    }
+
+    auto keyIt = nsIt->second.find(key);
+    if (keyIt == nsIt->second.end() || keyIt->second.size() != sizeof(uint16_t))
+    {
+        return std::nullopt;
+    }
+
+    uint16_t value;
+    std::memcpy(&value, keyIt->second.data(), sizeof(uint16_t));
+    LOPCORE_LOGD(TAG, "Read uint16 key '%s': %u [MOCK]", key.c_str(), value);
+    return value;
+#endif
+}
+
+std::optional<int32_t> NvsStorage::readInt32(const std::string &key)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!initialized_)
+    {
+        LOPCORE_LOGE(TAG, "Storage not initialized");
+        return std::nullopt;
+    }
+
+    if (!isValidKey(key))
+    {
+        return std::nullopt;
+    }
+
+#ifdef ESP_PLATFORM
+    if (!openHandle())
+    {
+        return std::nullopt;
+    }
+
+    int32_t value;
+    esp_err_t ret = nvs_get_i32(handle_, key.c_str(), &value);
+    if (ret == ESP_ERR_NVS_NOT_FOUND)
+    {
+        LOPCORE_LOGD(TAG, "Key not found: '%s'", key.c_str());
+        return std::nullopt;
+    }
+    else if (ret != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "Failed to read int32 key '%s': %d", key.c_str(), ret);
+        return std::nullopt;
+    }
+
+    LOPCORE_LOGD(TAG, "Read int32 key '%s': %d", key.c_str(), static_cast<int>(value));
+    return value;
+#else
+    auto nsIt = g_nvsData.find(config_.namespaceName);
+    if (nsIt == g_nvsData.end())
+    {
+        return std::nullopt;
+    }
+
+    auto keyIt = nsIt->second.find(key);
+    if (keyIt == nsIt->second.end() || keyIt->second.size() != sizeof(int32_t))
+    {
+        return std::nullopt;
+    }
+
+    int32_t value;
+    std::memcpy(&value, keyIt->second.data(), sizeof(int32_t));
+    LOPCORE_LOGD(TAG, "Read int32 key '%s': %d [MOCK]", key.c_str(), static_cast<int>(value));
+    return value;
+#endif
+}
+
+std::optional<uint32_t> NvsStorage::readUint32(const std::string &key)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!initialized_)
+    {
+        LOPCORE_LOGE(TAG, "Storage not initialized");
+        return std::nullopt;
+    }
+
+    if (!isValidKey(key))
+    {
+        return std::nullopt;
+    }
+
+#ifdef ESP_PLATFORM
+    if (!openHandle())
+    {
+        return std::nullopt;
+    }
+
+    uint32_t value;
+    esp_err_t ret = nvs_get_u32(handle_, key.c_str(), &value);
+    if (ret == ESP_ERR_NVS_NOT_FOUND)
+    {
+        LOPCORE_LOGD(TAG, "Key not found: '%s'", key.c_str());
+        return std::nullopt;
+    }
+    else if (ret != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "Failed to read uint32 key '%s': %d", key.c_str(), ret);
+        return std::nullopt;
+    }
+
+    LOPCORE_LOGD(TAG, "Read uint32 key '%s': %u", key.c_str(), static_cast<unsigned>(value));
+    return value;
+#else
+    auto nsIt = g_nvsData.find(config_.namespaceName);
+    if (nsIt == g_nvsData.end())
+    {
+        return std::nullopt;
+    }
+
+    auto keyIt = nsIt->second.find(key);
+    if (keyIt == nsIt->second.end() || keyIt->second.size() != sizeof(uint32_t))
+    {
+        return std::nullopt;
+    }
+
+    uint32_t value;
+    std::memcpy(&value, keyIt->second.data(), sizeof(uint32_t));
+    LOPCORE_LOGD(TAG, "Read uint32 key '%s': %u [MOCK]", key.c_str(), static_cast<unsigned>(value));
+    return value;
+#endif
+}
+
+std::optional<int64_t> NvsStorage::readInt64(const std::string &key)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!initialized_)
+    {
+        LOPCORE_LOGE(TAG, "Storage not initialized");
+        return std::nullopt;
+    }
+
+    if (!isValidKey(key))
+    {
+        return std::nullopt;
+    }
+
+#ifdef ESP_PLATFORM
+    if (!openHandle())
+    {
+        return std::nullopt;
+    }
+
+    int64_t value;
+    esp_err_t ret = nvs_get_i64(handle_, key.c_str(), &value);
+    if (ret == ESP_ERR_NVS_NOT_FOUND)
+    {
+        LOPCORE_LOGD(TAG, "Key not found: '%s'", key.c_str());
+        return std::nullopt;
+    }
+    else if (ret != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "Failed to read int64 key '%s': %d", key.c_str(), ret);
+        return std::nullopt;
+    }
+
+    LOPCORE_LOGD(TAG, "Read int64 key '%s': %lld", key.c_str(), static_cast<long long>(value));
+    return value;
+#else
+    auto nsIt = g_nvsData.find(config_.namespaceName);
+    if (nsIt == g_nvsData.end())
+    {
+        return std::nullopt;
+    }
+
+    auto keyIt = nsIt->second.find(key);
+    if (keyIt == nsIt->second.end() || keyIt->second.size() != sizeof(int64_t))
+    {
+        return std::nullopt;
+    }
+
+    int64_t value;
+    std::memcpy(&value, keyIt->second.data(), sizeof(int64_t));
+    LOPCORE_LOGD(TAG, "Read int64 key '%s': %lld [MOCK]", key.c_str(), static_cast<long long>(value));
+    return value;
+#endif
+}
+
+std::optional<uint64_t> NvsStorage::readUint64(const std::string &key)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!initialized_)
+    {
+        LOPCORE_LOGE(TAG, "Storage not initialized");
+        return std::nullopt;
+    }
+
+    if (!isValidKey(key))
+    {
+        return std::nullopt;
+    }
+
+#ifdef ESP_PLATFORM
+    if (!openHandle())
+    {
+        return std::nullopt;
+    }
+
+    uint64_t value;
+    esp_err_t ret = nvs_get_u64(handle_, key.c_str(), &value);
+    if (ret == ESP_ERR_NVS_NOT_FOUND)
+    {
+        LOPCORE_LOGD(TAG, "Key not found: '%s'", key.c_str());
+        return std::nullopt;
+    }
+    else if (ret != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "Failed to read uint64 key '%s': %d", key.c_str(), ret);
+        return std::nullopt;
+    }
+
+    LOPCORE_LOGD(TAG, "Read uint64 key '%s': %llu", key.c_str(), static_cast<unsigned long long>(value));
+    return value;
+#else
+    auto nsIt = g_nvsData.find(config_.namespaceName);
+    if (nsIt == g_nvsData.end())
+    {
+        return std::nullopt;
+    }
+
+    auto keyIt = nsIt->second.find(key);
+    if (keyIt == nsIt->second.end() || keyIt->second.size() != sizeof(uint64_t))
+    {
+        return std::nullopt;
+    }
+
+    uint64_t value;
+    std::memcpy(&value, keyIt->second.data(), sizeof(uint64_t));
+    LOPCORE_LOGD(TAG, "Read uint64 key '%s': %llu [MOCK]", key.c_str(),
+                 static_cast<unsigned long long>(value));
+    return value;
 #endif
 }
 

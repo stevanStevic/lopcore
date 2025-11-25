@@ -106,6 +106,146 @@ public:
         return StorageType::NVS;
     }
 
+    // Type-specific write methods
+
+    /**
+     * @brief Write int8_t value
+     *
+     * @param key NVS key (max 15 chars)
+     * @param value Value to write
+     * @return true if write successful, false otherwise
+     */
+    bool writeInt8(const std::string &key, int8_t value);
+
+    /**
+     * @brief Write uint8_t value
+     *
+     * @param key NVS key (max 15 chars)
+     * @param value Value to write
+     * @return true if write successful, false otherwise
+     */
+    bool writeUint8(const std::string &key, uint8_t value);
+
+    /**
+     * @brief Write int16_t value
+     *
+     * @param key NVS key (max 15 chars)
+     * @param value Value to write
+     * @return true if write successful, false otherwise
+     */
+    bool writeInt16(const std::string &key, int16_t value);
+
+    /**
+     * @brief Write uint16_t value
+     *
+     * @param key NVS key (max 15 chars)
+     * @param value Value to write
+     * @return true if write successful, false otherwise
+     */
+    bool writeUint16(const std::string &key, uint16_t value);
+
+    /**
+     * @brief Write int32_t value
+     *
+     * @param key NVS key (max 15 chars)
+     * @param value Value to write
+     * @return true if write successful, false otherwise
+     */
+    bool writeInt32(const std::string &key, int32_t value);
+
+    /**
+     * @brief Write uint32_t value
+     *
+     * @param key NVS key (max 15 chars)
+     * @param value Value to write
+     * @return true if write successful, false otherwise
+     */
+    bool writeUint32(const std::string &key, uint32_t value);
+
+    /**
+     * @brief Write int64_t value
+     *
+     * @param key NVS key (max 15 chars)
+     * @param value Value to write
+     * @return true if write successful, false otherwise
+     */
+    bool writeInt64(const std::string &key, int64_t value);
+
+    /**
+     * @brief Write uint64_t value
+     *
+     * @param key NVS key (max 15 chars)
+     * @param value Value to write
+     * @return true if write successful, false otherwise
+     */
+    bool writeUint64(const std::string &key, uint64_t value);
+
+    // Type-specific read methods
+
+    /**
+     * @brief Read int8_t value
+     *
+     * @param key NVS key (max 15 chars)
+     * @return Optional containing value if successful, nullopt otherwise
+     */
+    std::optional<int8_t> readInt8(const std::string &key);
+
+    /**
+     * @brief Read uint8_t value
+     *
+     * @param key NVS key (max 15 chars)
+     * @return Optional containing value if successful, nullopt otherwise
+     */
+    std::optional<uint8_t> readUint8(const std::string &key);
+
+    /**
+     * @brief Read int16_t value
+     *
+     * @param key NVS key (max 15 chars)
+     * @return Optional containing value if successful, nullopt otherwise
+     */
+    std::optional<int16_t> readInt16(const std::string &key);
+
+    /**
+     * @brief Read uint16_t value
+     *
+     * @param key NVS key (max 15 chars)
+     * @return Optional containing value if successful, nullopt otherwise
+     */
+    std::optional<uint16_t> readUint16(const std::string &key);
+
+    /**
+     * @brief Read int32_t value
+     *
+     * @param key NVS key (max 15 chars)
+     * @return Optional containing value if successful, nullopt otherwise
+     */
+    std::optional<int32_t> readInt32(const std::string &key);
+
+    /**
+     * @brief Read uint32_t value
+     *
+     * @param key NVS key (max 15 chars)
+     * @return Optional containing value if successful, nullopt otherwise
+     */
+    std::optional<uint32_t> readUint32(const std::string &key);
+
+    /**
+     * @brief Read int64_t value
+     *
+     * @param key NVS key (max 15 chars)
+     * @return Optional containing value if successful, nullopt otherwise
+     */
+    std::optional<int64_t> readInt64(const std::string &key);
+
+    /**
+     * @brief Read uint64_t value
+     *
+     * @param key NVS key (max 15 chars)
+     * @return Optional containing value if successful, nullopt otherwise
+     */
+    std::optional<uint64_t> readUint64(const std::string &key);
+
     // NVS-specific operations
 
     /**

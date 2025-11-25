@@ -10,15 +10,12 @@
  */
 
 #include "lopcore/storage/nvs_storage.hpp"
+#include "lopcore/logging/logger.hpp"
 
-#ifdef ESP_PLATFORM
-#include <esp_log.h>
-#else
+#ifndef ESP_PLATFORM
 // Host mocks
 #include <iostream>
 #include <map>
-#define ESP_LOGI(tag, format, ...) std::cout << "[INFO] " << tag << ": " << format << std::endl
-#define ESP_LOGE(tag, format, ...) std::cerr << "[ERROR] " << tag << ": " << format << std::endl
 #define ESP_OK 0
 #define ESP_FAIL -1
 #define ESP_ERR_NVS_NOT_FOUND 0x1106
@@ -71,23 +68,23 @@ bool NvsStorage::initialize()
     {
         // NVS partition was truncated or version changed
         // Erase and re-initialize
-        ESP_LOGI(TAG, "NVS needs re-initialization, erasing...");
+        LOPCORE_LOGI(TAG, "NVS needs re-initialization, erasing...");
         ESP_ERROR_CHECK(nvs_flash_erase());
         ret = nvs_flash_init();
     }
 
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to initialize NVS flash: %d", ret);
+        LOPCORE_LOGE(TAG, "Failed to initialize NVS flash: %d", ret);
         return false;
     }
 
-    ESP_LOGI(TAG, "NVS initialized with namespace: %s", config_.namespaceName.c_str());
+    LOPCORE_LOGI(TAG, "NVS initialized with namespace: %s", config_.namespaceName.c_str());
     initialized_ = true;
     return true;
 #else
     // Host: Mock initialization
-    ESP_LOGI(TAG, "NVS initialized (mock) with namespace: %s", config_.namespaceName.c_str());
+    LOPCORE_LOGI(TAG, "NVS initialized (mock) with namespace: %s", config_.namespaceName.c_str());
     initialized_ = true;
     return true;
 #endif
@@ -105,7 +102,7 @@ bool NvsStorage::openHandle()
     esp_err_t ret = nvs_open(config_.namespaceName.c_str(), mode, &handle_);
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to open NVS handle: %d", ret);
+        LOPCORE_LOGE(TAG, "Failed to open NVS handle: %d", ret);
         return false;
     }
 
@@ -126,7 +123,7 @@ bool NvsStorage::isValidKey(const std::string &key) const
 {
     if (key.empty() || key.length() > NVS_KEY_MAX_LENGTH)
     {
-        ESP_LOGE(TAG, "Invalid key length: %zu (must be 1-15 chars)", key.length());
+        LOPCORE_LOGE(TAG, "Invalid key length: %zu (must be 1-15 chars)", key.length());
         return false;
     }
     return true;
@@ -138,7 +135,7 @@ bool NvsStorage::write(const std::string &key, const std::string &data)
 
     if (!initialized_)
     {
-        ESP_LOGE(TAG, "Storage not initialized");
+        LOPCORE_LOGE(TAG, "Storage not initialized");
         return false;
     }
 
@@ -156,7 +153,7 @@ bool NvsStorage::write(const std::string &key, const std::string &data)
     esp_err_t ret = nvs_set_str(handle_, key.c_str(), data.c_str());
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to write key '%s': %d", key.c_str(), ret);
+        LOPCORE_LOGE(TAG, "Failed to write key '%s': %d", key.c_str(), ret);
         return false;
     }
 
@@ -164,18 +161,18 @@ bool NvsStorage::write(const std::string &key, const std::string &data)
     ret = nvs_commit(handle_);
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to commit NVS: %d", ret);
+        LOPCORE_LOGE(TAG, "Failed to commit NVS: %d", ret);
         return false;
     }
 
-    ESP_LOGI(TAG, "Wrote string key '%s' (%zu bytes)", key.c_str(), data.length());
+    LOPCORE_LOGD(TAG, "Wrote string key '%s' (%zu bytes)", key.c_str(), data.length());
     return true;
 #else
     // Host mock
     std::vector<uint8_t> bytes(data.begin(), data.end());
     bytes.push_back('\0'); // Null terminator
     g_nvsData[config_.namespaceName][key] = bytes;
-    ESP_LOGI(TAG, "Wrote string key '%s' (%zu bytes) [MOCK]", key.c_str(), data.length());
+    LOPCORE_LOGD(TAG, "Wrote string key '%s' (%zu bytes) [MOCK]", key.c_str(), data.length());
     return true;
 #endif
 }
@@ -186,7 +183,7 @@ bool NvsStorage::write(const std::string &key, const std::vector<uint8_t> &data)
 
     if (!initialized_)
     {
-        ESP_LOGE(TAG, "Storage not initialized");
+        LOPCORE_LOGE(TAG, "Storage not initialized");
         return false;
     }
 
@@ -204,7 +201,7 @@ bool NvsStorage::write(const std::string &key, const std::vector<uint8_t> &data)
     esp_err_t ret = nvs_set_blob(handle_, key.c_str(), data.data(), data.size());
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to write binary key '%s': %d", key.c_str(), ret);
+        LOPCORE_LOGE(TAG, "Failed to write binary key '%s': %d", key.c_str(), ret);
         return false;
     }
 
@@ -212,16 +209,16 @@ bool NvsStorage::write(const std::string &key, const std::vector<uint8_t> &data)
     ret = nvs_commit(handle_);
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to commit NVS: %d", ret);
+        LOPCORE_LOGE(TAG, "Failed to commit NVS: %d", ret);
         return false;
     }
 
-    ESP_LOGI(TAG, "Wrote binary key '%s' (%zu bytes)", key.c_str(), data.size());
+    LOPCORE_LOGD(TAG, "Wrote binary key '%s' (%zu bytes)", key.c_str(), data.size());
     return true;
 #else
     // Host mock
     g_nvsData[config_.namespaceName][key] = data;
-    ESP_LOGI(TAG, "Wrote binary key '%s' (%zu bytes) [MOCK]", key.c_str(), data.size());
+    LOPCORE_LOGD(TAG, "Wrote binary key '%s' (%zu bytes) [MOCK]", key.c_str(), data.size());
     return true;
 #endif
 }
@@ -232,7 +229,7 @@ std::optional<std::string> NvsStorage::read(const std::string &key)
 
     if (!initialized_)
     {
-        ESP_LOGE(TAG, "Storage not initialized");
+        LOPCORE_LOGE(TAG, "Storage not initialized");
         return std::nullopt;
     }
 
@@ -252,12 +249,12 @@ std::optional<std::string> NvsStorage::read(const std::string &key)
     esp_err_t ret = nvs_get_str(handle_, key.c_str(), nullptr, &requiredSize);
     if (ret == ESP_ERR_NVS_NOT_FOUND)
     {
-        ESP_LOGE(TAG, "Key not found: '%s'", key.c_str());
+        LOPCORE_LOGE(TAG, "Key not found: '%s'", key.c_str());
         return std::nullopt;
     }
     else if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to get size for key '%s': %d", key.c_str(), ret);
+        LOPCORE_LOGE(TAG, "Failed to get size for key '%s': %d", key.c_str(), ret);
         return std::nullopt;
     }
 
@@ -266,25 +263,25 @@ std::optional<std::string> NvsStorage::read(const std::string &key)
     ret = nvs_get_str(handle_, key.c_str(), &value[0], &requiredSize);
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to read key '%s': %d", key.c_str(), ret);
+        LOPCORE_LOGE(TAG, "Failed to read key '%s': %d", key.c_str(), ret);
         return std::nullopt;
     }
 
-    ESP_LOGI(TAG, "Read string key '%s' (%zu bytes)", key.c_str(), value.length());
+    LOPCORE_LOGI(TAG, "Read string key '%s' (%zu bytes)", key.c_str(), value.length());
     return value;
 #else
     // Host mock
     auto nsIt = g_nvsData.find(config_.namespaceName);
     if (nsIt == g_nvsData.end())
     {
-        ESP_LOGE(TAG, "Namespace not found: '%s'", config_.namespaceName.c_str());
+        LOPCORE_LOGE(TAG, "Namespace not found: '%s'", config_.namespaceName.c_str());
         return std::nullopt;
     }
 
     auto keyIt = nsIt->second.find(key);
     if (keyIt == nsIt->second.end())
     {
-        ESP_LOGE(TAG, "Key not found: '%s'", key.c_str());
+        LOPCORE_LOGE(TAG, "Key not found: '%s'", key.c_str());
         return std::nullopt;
     }
 
@@ -296,7 +293,7 @@ std::optional<std::string> NvsStorage::read(const std::string &key)
         value.pop_back();
     }
 
-    ESP_LOGI(TAG, "Read string key '%s' (%zu bytes) [MOCK]", key.c_str(), value.length());
+    LOPCORE_LOGI(TAG, "Read string key '%s' (%zu bytes) [MOCK]", key.c_str(), value.length());
     return value;
 #endif
 }
@@ -307,7 +304,7 @@ std::optional<std::vector<uint8_t>> NvsStorage::readBinary(const std::string &ke
 
     if (!initialized_)
     {
-        ESP_LOGE(TAG, "Storage not initialized");
+        LOPCORE_LOGE(TAG, "Storage not initialized");
         return std::nullopt;
     }
 
@@ -327,12 +324,12 @@ std::optional<std::vector<uint8_t>> NvsStorage::readBinary(const std::string &ke
     esp_err_t ret = nvs_get_blob(handle_, key.c_str(), nullptr, &requiredSize);
     if (ret == ESP_ERR_NVS_NOT_FOUND)
     {
-        ESP_LOGE(TAG, "Key not found: '%s'", key.c_str());
+        LOPCORE_LOGE(TAG, "Key not found: '%s'", key.c_str());
         return std::nullopt;
     }
     else if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to get size for key '%s': %d", key.c_str(), ret);
+        LOPCORE_LOGE(TAG, "Failed to get size for key '%s': %d", key.c_str(), ret);
         return std::nullopt;
     }
 
@@ -341,29 +338,29 @@ std::optional<std::vector<uint8_t>> NvsStorage::readBinary(const std::string &ke
     ret = nvs_get_blob(handle_, key.c_str(), data.data(), &requiredSize);
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to read key '%s': %d", key.c_str(), ret);
+        LOPCORE_LOGE(TAG, "Failed to read key '%s': %d", key.c_str(), ret);
         return std::nullopt;
     }
 
-    ESP_LOGI(TAG, "Read binary key '%s' (%zu bytes)", key.c_str(), data.size());
+    LOPCORE_LOGI(TAG, "Read binary key '%s' (%zu bytes)", key.c_str(), data.size());
     return data;
 #else
     // Host mock
     auto nsIt = g_nvsData.find(config_.namespaceName);
     if (nsIt == g_nvsData.end())
     {
-        ESP_LOGE(TAG, "Namespace not found: '%s'", config_.namespaceName.c_str());
+        LOPCORE_LOGE(TAG, "Namespace not found: '%s'", config_.namespaceName.c_str());
         return std::nullopt;
     }
 
     auto keyIt = nsIt->second.find(key);
     if (keyIt == nsIt->second.end())
     {
-        ESP_LOGE(TAG, "Key not found: '%s'", key.c_str());
+        LOPCORE_LOGE(TAG, "Key not found: '%s'", key.c_str());
         return std::nullopt;
     }
 
-    ESP_LOGI(TAG, "Read binary key '%s' (%zu bytes) [MOCK]", key.c_str(), keyIt->second.size());
+    LOPCORE_LOGI(TAG, "Read binary key '%s' (%zu bytes) [MOCK]", key.c_str(), keyIt->second.size());
     return keyIt->second;
 #endif
 }
@@ -418,7 +415,7 @@ std::vector<std::string> NvsStorage::listKeys()
 
     if (!initialized_)
     {
-        ESP_LOGE(TAG, "Storage not initialized");
+        LOPCORE_LOGE(TAG, "Storage not initialized");
         return keys;
     }
 
@@ -426,7 +423,7 @@ std::vector<std::string> NvsStorage::listKeys()
     // Note: NVS doesn't provide a native way to list all keys
     // This would require iterating through the entire NVS partition
     // which is not efficient. For now, return empty vector.
-    ESP_LOGI(TAG, "NVS does not support efficient key listing");
+    LOPCORE_LOGI(TAG, "NVS does not support efficient key listing");
     return keys;
 #else
     // Host mock - we can list keys
@@ -439,7 +436,7 @@ std::vector<std::string> NvsStorage::listKeys()
         }
     }
 
-    ESP_LOGI(TAG, "Listed %zu keys [MOCK]", keys.size());
+    LOPCORE_LOGI(TAG, "Listed %zu keys [MOCK]", keys.size());
     return keys;
 #endif
 }
@@ -450,7 +447,7 @@ bool NvsStorage::remove(const std::string &key)
 
     if (!initialized_)
     {
-        ESP_LOGE(TAG, "Storage not initialized");
+        LOPCORE_LOGE(TAG, "Storage not initialized");
         return false;
     }
 
@@ -469,12 +466,12 @@ bool NvsStorage::remove(const std::string &key)
     if (ret == ESP_ERR_NVS_NOT_FOUND)
     {
         // Key doesn't exist, consider it success (idempotent)
-        ESP_LOGI(TAG, "Key doesn't exist (already removed): '%s'", key.c_str());
+        LOPCORE_LOGI(TAG, "Key doesn't exist (already removed): '%s'", key.c_str());
         return true;
     }
     else if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to erase key '%s': %d", key.c_str(), ret);
+        LOPCORE_LOGE(TAG, "Failed to erase key '%s': %d", key.c_str(), ret);
         return false;
     }
 
@@ -482,11 +479,11 @@ bool NvsStorage::remove(const std::string &key)
     ret = nvs_commit(handle_);
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to commit NVS: %d", ret);
+        LOPCORE_LOGE(TAG, "Failed to commit NVS: %d", ret);
         return false;
     }
 
-    ESP_LOGI(TAG, "Removed key: '%s'", key.c_str());
+    LOPCORE_LOGI(TAG, "Removed key: '%s'", key.c_str());
     return true;
 #else
     // Host mock
@@ -496,7 +493,7 @@ bool NvsStorage::remove(const std::string &key)
         nsIt->second.erase(key);
     }
 
-    ESP_LOGI(TAG, "Removed key: '%s' [MOCK]", key.c_str());
+    LOPCORE_LOGI(TAG, "Removed key: '%s' [MOCK]", key.c_str());
     return true;
 #endif
 }
@@ -526,7 +523,7 @@ bool NvsStorage::eraseNamespace()
 
     if (!initialized_)
     {
-        ESP_LOGE(TAG, "Storage not initialized");
+        LOPCORE_LOGE(TAG, "Storage not initialized");
         return false;
     }
 
@@ -539,7 +536,7 @@ bool NvsStorage::eraseNamespace()
     esp_err_t ret = nvs_erase_all(handle_);
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to erase namespace '%s': %d", config_.namespaceName.c_str(), ret);
+        LOPCORE_LOGE(TAG, "Failed to erase namespace '%s': %d", config_.namespaceName.c_str(), ret);
         return false;
     }
 
@@ -547,16 +544,16 @@ bool NvsStorage::eraseNamespace()
     ret = nvs_commit(handle_);
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to commit NVS: %d", ret);
+        LOPCORE_LOGE(TAG, "Failed to commit NVS: %d", ret);
         return false;
     }
 
-    ESP_LOGI(TAG, "Erased namespace: '%s'", config_.namespaceName.c_str());
+    LOPCORE_LOGI(TAG, "Erased namespace: '%s'", config_.namespaceName.c_str());
     return true;
 #else
     // Host mock
     g_nvsData[config_.namespaceName].clear();
-    ESP_LOGI(TAG, "Erased namespace: '%s' [MOCK]", config_.namespaceName.c_str());
+    LOPCORE_LOGI(TAG, "Erased namespace: '%s' [MOCK]", config_.namespaceName.c_str());
     return true;
 #endif
 }
@@ -574,15 +571,15 @@ bool NvsStorage::commit()
     esp_err_t ret = nvs_commit(handle_);
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to commit NVS: %d", ret);
+        LOPCORE_LOGE(TAG, "Failed to commit NVS: %d", ret);
         return false;
     }
 
-    ESP_LOGI(TAG, "Committed NVS changes");
+    LOPCORE_LOGI(TAG, "Committed NVS changes");
     return true;
 #else
     // Host mock - no-op
-    ESP_LOGI(TAG, "Committed NVS changes [MOCK]");
+    LOPCORE_LOGI(TAG, "Committed NVS changes [MOCK]");
     return true;
 #endif
 }

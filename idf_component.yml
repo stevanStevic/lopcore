@@ -20,6 +20,13 @@ dependencies:
         version: ">=1.14.0"
         require: public # Make it available to parent components
 
+    # tinyCBOR for efficient binary serialization (optional)
+    # Used by Fleet Provisioning when CONFIG_LOPCORE_PROV_AWS_CBOR is enabled
+    # Component will build without it, falling back to JSON
+    espressif/cbor:
+        version: ">=0.6.0"
+        require: public
+
     # AWS IoT SDK (optional but recommended for CoreMQTT client)
     # When present, enables CoreMQTT client implementation
     # Provides: coreMQTT, corePKCS11, Device Shadow, Jobs, Fleet Provisioning, etc.

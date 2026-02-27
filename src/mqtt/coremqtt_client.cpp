@@ -139,7 +139,7 @@ CoreMqttClient::~CoreMqttClient()
 
 esp_err_t CoreMqttClient::connect()
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::unique_lock<std::mutex> lock(mutex_);
 
     if (state_ == MqttConnectionState::CONNECTED)
     {
@@ -215,21 +215,10 @@ esp_err_t CoreMqttClient::connect()
     LOPCORE_LOGI(TAG, "Connected to %s:%d (session=%s)", config_.broker.c_str(), config_.port,
                  sessionPresent ? "resumed" : "new");
 
-    // Auto-start ProcessLoop task if enabled in config
-    if (config_.autoStartProcessLoop)
-    {
-        esp_err_t err = startProcessLoopTask();
-        if (err != ESP_OK)
-        {
-            LOPCORE_LOGE(TAG, "Failed to start ProcessLoop task");
-            state_ = MqttConnectionState::ERROR;
-            return err;
-        }
-    }
-    else
-    {
-        LOPCORE_LOGI(TAG, "ProcessLoop auto-start disabled - call startProcessLoopTask() manually");
-    }
+    // Release mutex before firing callbacks and doing network I/O (resubscribe/
+    // resend). This prevents deadlock if the user's onConnect callback calls
+    // publish() or subscribe(), which also acquire mutex_.
+    lock.unlock();
 
     // Notify application
     if (connectionCallback_)
@@ -248,42 +237,74 @@ esp_err_t CoreMqttClient::connect()
         resendPendingPublishes();
     }
 
+    // Auto-start ProcessLoop task if enabled in config.
+    // IMPORTANT: task is started AFTER resubscribeTopics()/resendPendingPublishes()
+    // to avoid a data race: both MQTT_ProcessLoop() (in the task) and
+    // MQTT_Subscribe() (in resubscribeTopics()) access mqttContext_, which is
+    // not thread-safe internally. Starting the task last eliminates that race.
+    if (config_.autoStartProcessLoop)
+    {
+        esp_err_t err = startProcessLoopTask();
+        if (err != ESP_OK)
+        {
+            LOPCORE_LOGE(TAG, "Failed to start ProcessLoop task");
+            return err;
+        }
+    }
+    else
+    {
+        LOPCORE_LOGI(TAG, "ProcessLoop auto-start disabled - call startProcessLoopTask() manually");
+    }
+
     return ESP_OK;
 }
 
 esp_err_t CoreMqttClient::disconnect()
 {
-    // Stop ProcessLoop task first (if running)
+    // Signal ProcessLoop task to stop early, before acquiring the mutex.
+    // This lets the task exit its loop as soon as it finishes the current
+    // MQTT_processLoop call, instead of deadlocking on the mutex.
+    shouldRun_ = false;
+
+    // Track whether this call performed actual teardown.
+    // If state_ was already DISCONNECTED (connection lost unexpectedly),
+    // processLoopTask() already fired connectionCallback_(false); we must NOT
+    // fire it again here to avoid a double invocation.
+    bool wasConnected = false;
+
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        if (state_ != MqttConnectionState::DISCONNECTED)
+        {
+            wasConnected = true;
+
+            MQTTStatus_t mqttStatus = MQTT_Disconnect(&mqttContext_);
+            if (mqttStatus != MQTTSuccess)
+            {
+                LOPCORE_LOGW(TAG, "MQTT_Disconnect failed: %d", mqttStatus);
+            }
+
+            if (tlsTransport_ && isConnected())
+            {
+                tlsTransport_->disconnect();
+            }
+
+            state_ = MqttConnectionState::DISCONNECTED;
+            statistics_.reconnectCount++;
+            statistics_.lastDisconnected = std::chrono::system_clock::now();
+        }
+        // If already DISCONNECTED (e.g. processLoop() detected connection loss),
+        // skip teardown but still fall through to stopProcessLoopTask() below
+        // to clear the stale processTask_ handle and drain the semaphore.
+    }
+    // Mutex released so ProcessLoop task can now finish its iteration and exit
+
     stopProcessLoopTask();
-
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    if (state_ == MqttConnectionState::DISCONNECTED)
-    {
-        return ESP_OK;
-    }
-
-    // Send DISCONNECT
-    MQTTStatus_t mqttStatus = MQTT_Disconnect(&mqttContext_);
-    if (mqttStatus != MQTTSuccess)
-    {
-        LOPCORE_LOGW(TAG, "MQTT_Disconnect failed: %d", mqttStatus);
-    }
-
-    state_ = MqttConnectionState::DISCONNECTED;
-    statistics_.reconnectCount++;
-    statistics_.lastDisconnected = std::chrono::system_clock::now();
-
-    // Disconnect TLS transport
-    if (tlsTransport_)
-    {
-        tlsTransport_->disconnect();
-    }
 
     LOPCORE_LOGI(TAG, "Disconnected");
 
-    // Notify application
-    if (connectionCallback_)
+    if (wasConnected && connectionCallback_)
     {
         connectionCallback_(false);
     }
@@ -506,11 +527,20 @@ esp_err_t CoreMqttClient::processLoop(uint32_t timeoutMs)
 
     MQTTStatus_t mqttStatus = MQTTSuccess;
 
-    // Call MQTT_ProcessLoop repeatedly until timeout expires
-    // MQTT_ProcessLoop() processes exactly one MQTT packet per call
-    // MQTTNeedMoreBytes means "no data available yet, try again"
+    // Call MQTT_ProcessLoop repeatedly until timeout expires.
+    // MQTT_ProcessLoop() processes exactly one MQTT packet per call.
+    // MQTTNeedMoreBytes means "no data available yet, try again".
+    // NOTE: mutex IS held here; eventCallback (and thus user MessageCallbacks)
+    // are fired from within MQTT_ProcessLoop() on this same thread.
+    // User callbacks must NOT call back into publish()/subscribe() etc.
     while ((currentTimeMs < endTimeMs) && (mqttStatus == MQTTSuccess || mqttStatus == MQTTNeedMoreBytes))
     {
+        // Check if we're still connected before each blocking call
+        if (!isConnected())
+        {
+            return ESP_ERR_INVALID_STATE;
+        }
+
         mqttStatus = MQTT_ProcessLoop(&mqttContext_);
         currentTimeMs = getTimeMs();
     }
@@ -520,19 +550,12 @@ esp_err_t CoreMqttClient::processLoop(uint32_t timeoutMs)
     {
         LOPCORE_LOGE(TAG, "MQTT_ProcessLoop failed: %d", mqttStatus);
 
-        // Connection lost - trigger disconnect
+        // Mark as disconnected so other threads fail fast on publish/subscribe.
+        // Do NOT tear down TLS or fire the connection callback here —
+        // that is disconnect()'s responsibility. processLoopTask() will detect
+        // !isConnected(), exit its loop, and the caller is expected to invoke
+        // disconnect() to complete the teardown cleanly.
         state_ = MqttConnectionState::DISCONNECTED;
-
-        // Disconnect TLS transport
-        if (tlsTransport_)
-        {
-            tlsTransport_->disconnect();
-        }
-
-        if (connectionCallback_)
-        {
-            connectionCallback_(false);
-        }
 
         return ESP_FAIL;
     }
@@ -866,10 +889,11 @@ esp_err_t CoreMqttClient::stopProcessLoopTask()
     // Signal task to stop (atomic - no mutex needed)
     shouldRun_ = false;
 
-    // Wait for task to signal completion via semaphore
-    // Task will exit its loop and give the semaphore before deleting itself
-    // Max wait time: processLoop timeout + delay + some overhead
-    const uint32_t maxWaitMs = config_.processLoopTimeoutMs + config_.processLoopDelayMs + 100;
+    // Wait for task to signal completion via semaphore.
+    // Task will exit its loop and give the semaphore before deleting itself.
+    // Use a flat 1000ms ceiling: enough for any in-progress MQTT_ProcessLoop() call
+    // plus TLS teardown, without needing to know the configured timeouts.
+    const uint32_t maxWaitMs = 1000;
     const TickType_t maxWaitTicks = pdMS_TO_TICKS(maxWaitMs);
 
     if (xSemaphoreTake(taskStoppedSemaphore_, maxWaitTicks) == pdTRUE)
@@ -930,9 +954,8 @@ void CoreMqttClient::processLoopTask()
     while (shouldRun_)
     {
         // Check connection state
-        if (state_ != MqttConnectionState::CONNECTED)
+        if (!isConnected())
         {
-            LOPCORE_LOGW(TAG, "Connection lost in ProcessLoop");
             break;
         }
 
@@ -942,9 +965,8 @@ void CoreMqttClient::processLoopTask()
         if (err != ESP_OK)
         {
             // Check if it's a connection error
-            if (state_ != MqttConnectionState::CONNECTED)
+            if (!isConnected())
             {
-                LOPCORE_LOGW(TAG, "Connection lost in ProcessLoop");
                 break;
             }
 
@@ -955,11 +977,26 @@ void CoreMqttClient::processLoopTask()
             }
         }
 
-        // Sleep between iterations to prevent busy-waiting
-        vTaskDelay(pdMS_TO_TICKS(config_.processLoopDelayMs));
+        // Sleep between iterations to prevent busy-waiting.
+        // Break into 10ms chunks so shouldRun_ is checked frequently.
+        for (int i = 0; i < (int)config_.processLoopDelayMs && shouldRun_; i += 10)
+        {
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
     }
 
     LOPCORE_LOGI(TAG, "ProcessLoop task exiting gracefully");
+
+    // If shouldRun_ is still true here, the loop exited due to an unexpected
+    // connection loss (not a deliberate disconnect() call). Notify the user.
+    if (shouldRun_)
+    {
+        LOPCORE_LOGW(TAG, "Unexpected disconnection detected in ProcessLoop task");
+        if (connectionCallback_)
+        {
+            connectionCallback_(false);
+        }
+    }
 
     // Signal that we've stopped (give semaphore before deleting ourselves)
     xSemaphoreGive(taskStoppedSemaphore_);

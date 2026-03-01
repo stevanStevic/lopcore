@@ -358,11 +358,12 @@ esp_err_t MbedtlsTransport::connectWithRetries(const TlsConfig &config)
     const char **alpnProtos = setupAlpnProtocols(config.port);
     credentials.pAlpnProtos = alpnProtos;
 
-    // Get timeout value (convert chrono to milliseconds)
-    uint32_t timeoutMs = static_cast<uint32_t>(config.recvTimeout.count());
-    if (timeoutMs == 0)
+    // Use connectionTimeout for the TLS handshake (needs longer than recvTimeout
+    // to handle multi-round-trip handshake under network congestion)
+    uint32_t handshakeTimeoutMs = static_cast<uint32_t>(config.connectionTimeout.count());
+    if (handshakeTimeoutMs == 0)
     {
-        timeoutMs = DEFAULT_SEND_RECV_TIMEOUT_MS;
+        handshakeTimeoutMs = DEFAULT_SEND_RECV_TIMEOUT_MS;
     }
 
     // Initialize backoff algorithm for retries
@@ -390,7 +391,7 @@ esp_err_t MbedtlsTransport::connectWithRetries(const TlsConfig &config)
         // Attempt connection
         MbedtlsPkcs11Status_t tlsStatus = Mbedtls_Pkcs11_Connect(networkContext_.get(),
                                                                  config.hostname.c_str(), config.port,
-                                                                 &credentials, timeoutMs);
+                                                                 &credentials, handshakeTimeoutMs);
 
         success = (tlsStatus == MBEDTLS_PKCS11_SUCCESS);
 
@@ -416,6 +417,15 @@ esp_err_t MbedtlsTransport::connectWithRetries(const TlsConfig &config)
     {
         LOPCORE_LOGE(TAG, "Failed to establish TLS connection after all retries");
         return ESP_FAIL;
+    }
+
+    // After successful handshake, lower the read timeout to recvTimeout for
+    // post-connection operations (e.g. MQTT ProcessLoop) so the mutex is not
+    // held for the full handshake duration on every recv call.
+    uint32_t recvTimeoutMs = static_cast<uint32_t>(config.recvTimeout.count());
+    if (recvTimeoutMs > 0 && recvTimeoutMs != handshakeTimeoutMs)
+    {
+        mbedtls_ssl_conf_read_timeout(&(tlsContext_->config), recvTimeoutMs);
     }
 
     return ESP_OK;

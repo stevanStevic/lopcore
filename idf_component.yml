@@ -20,6 +20,10 @@ dependencies:
         version: ">=1.14.0"
         require: public # Make it available to parent components
 
+    # CBOR support (optional, for AWS IoT or other features)
+    espressif/cbor:
+        version: ">=0.6.0"
+
     # AWS IoT SDK (optional but recommended for CoreMQTT client)
     # When present, enables CoreMQTT client implementation
     # Provides: coreMQTT, corePKCS11, Device Shadow, Jobs, Fleet Provisioning, etc.

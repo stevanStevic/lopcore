@@ -1,12 +1,14 @@
 #include "lopcore/prov/wifi_provisioning.hpp"
-#include "lopcore/prov/ble_data_framer.hpp"
 
+#include <cstdlib>
 #include <cstring>
 
 #include <esp_log.h>
 #include <wifi_provisioning/manager.h>
 #include <wifi_provisioning/scheme_ble.h>
 #include <wifi_provisioning/scheme_softap.h>
+
+#include "lopcore/prov/ble_data_framer.hpp"
 
 static const char *TAG = "WiFiProvisioning";
 
@@ -45,42 +47,57 @@ static esp_err_t custom_endpoint_handler(uint32_t session_id,
     }
 
     auto &handler = it->second;
-    auto &framer = g_framerMap[endpoint_name];
+    auto framerIt = g_framerMap.find(endpoint_name);
+    if (framerIt == g_framerMap.end())
+    {
+        ESP_LOGE(TAG, "Framer not found for endpoint: %s", endpoint_name);
+        return ESP_ERR_NOT_FOUND;
+    }
+    auto &framer = framerIt->second;
 
     // Feed data to framer (handles length-prefixed chunk reassembly)
-    BleDataFramer::FrameResult result = framer.onData(inbuf, inlen);
+    FrameResult result = framer.onData(inbuf, inlen);
 
     switch (result)
     {
-        case BleDataFramer::FrameResult::NEED_MORE:
+        case FrameResult::NEED_MORE:
             // Waiting for more chunks, send empty ACK
             *outbuf = nullptr;
             *outlen = 0;
             return ESP_OK;
 
-        case BleDataFramer::FrameResult::COMPLETE:
-        {
+        case FrameResult::COMPLETE: {
             // Full payload received, forward to handler
-            const std::vector<uint8_t>& payload = framer.payload();
-            bool success = handler->onDataReceived(session_id, payload.data(), payload.size(), true);
-            
+            const uint8_t *payload = framer.payload();
+            size_t payloadLen = framer.payloadSize();
+            bool success = handler->onDataReceived(session_id, payload, payloadLen, true);
+
             // Reset framer for next transfer
             framer.reset();
-            
+
             if (!success)
             {
                 ESP_LOGE(TAG, "Handler failed for endpoint: %s", endpoint_name);
                 return ESP_FAIL;
             }
 
-            // Get response (if any)
-            static uint8_t response_buffer[1024]; // Static to persist after return
-            size_t response_len = handler->getResponse(session_id, response_buffer, sizeof(response_buffer));
+            // Get response (if any).
+            // protocomm will call free(*outbuf) — MUST use malloc here, not static buffer.
+            const size_t kMaxResponseSize = 1024;
+            uint8_t temp_buf[kMaxResponseSize];
+            size_t response_len = handler->getResponse(session_id, temp_buf, sizeof(temp_buf));
 
             if (response_len > 0)
             {
-                *outbuf = response_buffer;
-                *outlen = response_len;
+                *outbuf = static_cast<uint8_t *>(malloc(response_len));
+                if (*outbuf == nullptr)
+                {
+                    ESP_LOGE(TAG, "OOM allocating response for endpoint %s", endpoint_name);
+                    *outlen = 0;
+                    return ESP_ERR_NO_MEM;
+                }
+                memcpy(*outbuf, temp_buf, response_len);
+                *outlen = static_cast<ssize_t>(response_len);
             }
             else
             {
@@ -91,12 +108,12 @@ static esp_err_t custom_endpoint_handler(uint32_t session_id,
             return ESP_OK;
         }
 
-        case BleDataFramer::FrameResult::ERROR_TOO_LARGE:
+        case FrameResult::ERROR_TOO_LARGE:
             ESP_LOGE(TAG, "Framer error: payload too large for endpoint %s", endpoint_name);
             framer.reset();
             return ESP_ERR_NO_MEM;
 
-        case BleDataFramer::FrameResult::ERROR_INVALID:
+        case FrameResult::ERROR_INVALID:
         default:
             ESP_LOGE(TAG, "Framer error: invalid data for endpoint %s", endpoint_name);
             framer.reset();
@@ -165,33 +182,18 @@ bool WiFiProvisioning::init(const WiFiProvisioningConfig &config)
         // Store handler in global map (for C callbacks)
         g_handlerMap[endpoint.endpointName] = endpoint.handler;
         handlers_[endpoint.endpointName] = endpoint.handler;
-        
+
         // Initialize BLE framer for this endpoint (default max size from Kconfig)
-#ifdef CONFIG_LOPCORE_PROV_BLE_MAX_PAYLOAD_SIZE
-        g_framerMap[endpoint.endpointName] = BleDataFramer(CONFIG_LOPCORE_PROV_BLE_MAX_PAYLOAD_SIZE);
+#ifdef CONFIG_LOPCORE_PROV_BLE_MAX_PAYLOAD
+        g_framerMap.insert_or_assign(endpoint.endpointName,
+                                     BleDataFramer(CONFIG_LOPCORE_PROV_BLE_MAX_PAYLOAD));
 #else
-        g_framerMap[endpoint.endpointName] = BleDataFramer(4096);  // Default 4KB
+        g_framerMap.insert_or_assign(endpoint.endpointName, BleDataFramer(4096)); // Default 4KB
 #endif
 
-        // Determine protocol ID for ESP-IDF
-        uint8_t protocol_id = 0;
-        switch (endpoint.handler->getProtocol())
-        {
-            case EndpointProtocol::JSON_LENGTH_PREFIXED:
-                protocol_id = 0x01;
-                break;
-            case EndpointProtocol::PROTOBUF:
-                protocol_id = 0x02;
-                break;
-            case EndpointProtocol::CBOR:
-                protocol_id = 0x03;
-                break;
-            case EndpointProtocol::RAW:
-            default:
-                protocol_id = 0x00;
-                break;
-        }
-
+        // Create endpoint slot in wifi_prov_mgr.
+        // Registration (wifi_prov_mgr_endpoint_register) must happen AFTER
+        // wifi_prov_mgr_start_provisioning(), so we defer it to start().
         err = wifi_prov_mgr_endpoint_create(endpoint.endpointName.c_str());
         if (err != ESP_OK)
         {
@@ -200,19 +202,7 @@ bool WiFiProvisioning::init(const WiFiProvisioningConfig &config)
             return false;
         }
 
-        err = wifi_prov_mgr_endpoint_register(endpoint.endpointName.c_str(), custom_endpoint_handler,
-                                              const_cast<char *>(endpoint.endpointName.c_str()) // priv_data
-        );
-
-        if (err != ESP_OK)
-        {
-            ESP_LOGE(TAG, "Failed to register endpoint %s: %s", endpoint.endpointName.c_str(),
-                     esp_err_to_name(err));
-            return false;
-        }
-
-        ESP_LOGI(TAG, "Registered custom endpoint: %s (protocol: 0x%02X)", endpoint.endpointName.c_str(),
-                 protocol_id);
+        ESP_LOGI(TAG, "Created custom endpoint slot: %s", endpoint.endpointName.c_str());
     }
 
     initialized_ = true;
@@ -279,6 +269,24 @@ bool WiFiProvisioning::start()
 
     running_ = true;
     ESP_LOGI(TAG, "WiFi provisioning started (service: %s)", service_name);
+
+    // Register custom endpoints NOW — wifi_prov_mgr_endpoint_register must be called
+    // AFTER wifi_prov_mgr_start_provisioning().  Use the key pointer from handlers_
+    // (stable for the lifetime of the map) to avoid a dangling priv_data pointer.
+    for (const auto &[name, handler] : handlers_)
+    {
+        const char *stable_name = handlers_.find(name)->first.c_str();
+        esp_err_t reg_err = wifi_prov_mgr_endpoint_register(name.c_str(), custom_endpoint_handler,
+                                                            const_cast<char *>(stable_name));
+
+        if (reg_err != ESP_OK)
+        {
+            ESP_LOGE(TAG, "Failed to register endpoint %s: %s", name.c_str(), esp_err_to_name(reg_err));
+            return false;
+        }
+        ESP_LOGI(TAG, "Registered endpoint: %s", name.c_str());
+    }
+
     return true;
 }
 

@@ -1,0 +1,7 @@
+## IDF Component Manager Manifest File
+dependencies:
+    ## Required IDF version
+    idf:
+        version: ">=5.0.0"
+    ## CBOR serialisation - used by AWS Fleet Provisioning topics
+    espressif/cbor: ^0.6.0

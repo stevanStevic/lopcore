@@ -1,0 +1,61 @@
+# ==============================================================================
+# Provisioning Module
+# ==============================================================================
+
+# Enable lopcore provisioning support
+CONFIG_LOPCORE_ENABLE_PROVISIONING=y
+
+# Transport: BLE (comment out and set SOFTAP to use SoftAP instead)
+CONFIG_LOPCORE_PROV_TRANSPORT_BLE=y
+# CONFIG_LOPCORE_PROV_TRANSPORT_SOFTAP is not set
+
+# Security level: 0 = open (suitable for development)
+# For production use SECURITY_1 or SECURITY_2 with proof-of-possession
+CONFIG_LOPCORE_PROV_SECURITY_0=y
+# CONFIG_LOPCORE_PROV_SECURITY_1 is not set
+# CONFIG_LOPCORE_PROV_SECURITY_2 is not set
+
+# Allow up to 4096 bytes per BLE packet (needed for PEM certificate transfer)
+CONFIG_LOPCORE_PROV_BLE_MAX_PAYLOAD=4096
+
+# AWS Fleet Provisioning workflow
+CONFIG_LOPCORE_PROV_AWS_FLEET=y
+
+# Use CBOR serialisation on provisioning topics (matches AWS defaults)
+CONFIG_LOPCORE_PROV_AWS_CBOR=y
+
+# ==============================================================================
+# Certificate Storage
+# ==============================================================================
+
+# Use mbedTLS software keys (development mode - no PKCS11 hardware needed)
+# For production, enable CONFIG_LOPCORE_PROV_CERT_COREP11 instead
+# CONFIG_LOPCORE_PROV_CERT_COREP11 is not set
+CONFIG_LOPCORE_PROV_CERT_MBEDTLS_ONLY=y
+
+# ==============================================================================
+# mbedTLS threading (required for corePKCS11 and TLS stack)
+# ==============================================================================
+
+CONFIG_MBEDTLS_THREADING_C=y
+# CONFIG_MBEDTLS_THREADING_ALT is not set
+CONFIG_MBEDTLS_THREADING_PTHREAD=y
+
+# ==============================================================================
+# Bluetooth (ESP32 BLE for provisioning)
+# ==============================================================================
+
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+
+# ==============================================================================
+# WiFi
+# ==============================================================================
+
+CONFIG_ESP_WIFI_SOFTAP_SUPPORT=y
+
+# ==============================================================================
+# NVS
+# ==============================================================================
+
+CONFIG_NVS_ENCRYPTION=n

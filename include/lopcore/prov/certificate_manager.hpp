@@ -257,6 +257,11 @@ private:
 
     // Helper: Convert PEM to DER
     int pemToDer(const std::string &pem, std::vector<uint8_t> &der) const;
+
+#if CONFIG_LOPCORE_PROV_CERT_COREP11
+    // PKCS#11 path for key pair generation + CSR signing
+    bool generateKeyPairAndCsrPkcs11_(const std::string &commonName, std::string &csrOut);
+#endif
 };
 
 } // namespace prov

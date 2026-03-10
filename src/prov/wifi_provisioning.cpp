@@ -2,8 +2,14 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
+#include <esp_event.h>
 #include <esp_log.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/event_groups.h>
+#include <freertos/semphr.h>
+#include <protocomm_ble.h>
 #include <wifi_provisioning/manager.h>
 #include <wifi_provisioning/scheme_ble.h>
 #include <wifi_provisioning/scheme_softap.h>
@@ -30,6 +36,127 @@ static std::map<std::string, std::shared_ptr<ICustomEndpointHandler>> g_handlerM
 // BLE framer for each endpoint (handles length-prefixed chunks)
 static std::map<std::string, BleDataFramer> g_framerMap;
 
+/**
+ * Mutex protecting g_handlerMap and g_framerMap.
+ * Taken by init()/stop() (app task) and custom_endpoint_handler() (event task)
+ * to prevent concurrent access across FreeRTOS tasks.
+ */
+static SemaphoreHandle_t g_mapMutex = nullptr;
+
+// ---------- Event group bits ----------
+
+static const EventBits_t PROV_SUCCESS_BIT = BIT0;
+static const EventBits_t PROV_FAILURE_BIT = BIT1;
+
+/**
+ * Pointer to the active WiFiProvisioningEvents so the static event handler
+ * can call them.  Set during init(), cleared during stop().
+ */
+static const WiFiProvisioningEvents *g_eventCallbacks = nullptr;
+
+/**
+ * Event group used by waitForCompletion().
+ * Aliased through eventGroup_ (stored as void*) in WiFiProvisioning.
+ */
+static EventGroupHandle_t g_provEventGroup = nullptr;
+
+/**
+ * Static ESP-IDF event handler for WIFI_PROV_EVENT and
+ * PROTOCOMM_TRANSPORT_BLE_EVENT.
+ */
+static void prov_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
+{
+    if (event_base == WIFI_PROV_EVENT)
+    {
+        switch (event_id)
+        {
+            case WIFI_PROV_START:
+                ESP_LOGI(TAG, "Provisioning started");
+                if (g_eventCallbacks && g_eventCallbacks->onStarted)
+                {
+                    g_eventCallbacks->onStarted();
+                }
+                break;
+
+            case WIFI_PROV_CRED_RECV: {
+                wifi_sta_config_t *wifi_sta_cfg = static_cast<wifi_sta_config_t *>(event_data);
+                std::string ssid(reinterpret_cast<const char *>(wifi_sta_cfg->ssid));
+                std::string password(reinterpret_cast<const char *>(wifi_sta_cfg->password));
+                ESP_LOGI(TAG, "Received WiFi credentials — SSID: %s", ssid.c_str());
+                if (g_eventCallbacks && g_eventCallbacks->onCredentialsReceived)
+                {
+                    g_eventCallbacks->onCredentialsReceived(ssid, password);
+                }
+                break;
+            }
+
+            case WIFI_PROV_CRED_FAIL: {
+                wifi_prov_sta_fail_reason_t *reason = static_cast<wifi_prov_sta_fail_reason_t *>(event_data);
+                std::string reasonStr = (*reason == WIFI_PROV_STA_AUTH_ERROR) ? "WiFi authentication failed"
+                                                                              : "Access-point not found";
+                ESP_LOGE(TAG, "Provisioning failed: %s", reasonStr.c_str());
+                wifi_prov_mgr_reset_sm_state_on_failure();
+                if (g_eventCallbacks && g_eventCallbacks->onFailed)
+                {
+                    g_eventCallbacks->onFailed(reasonStr);
+                }
+                if (g_provEventGroup)
+                {
+                    xEventGroupSetBits(g_provEventGroup, PROV_FAILURE_BIT);
+                }
+                break;
+            }
+
+            case WIFI_PROV_CRED_SUCCESS:
+                ESP_LOGI(TAG, "Provisioning successful");
+                if (g_eventCallbacks && g_eventCallbacks->onSuccess)
+                {
+                    g_eventCallbacks->onSuccess();
+                }
+                if (g_provEventGroup)
+                {
+                    xEventGroupSetBits(g_provEventGroup, PROV_SUCCESS_BIT);
+                }
+                break;
+
+            case WIFI_PROV_END:
+                ESP_LOGI(TAG, "Provisioning ended");
+                if (g_eventCallbacks && g_eventCallbacks->onEnd)
+                {
+                    g_eventCallbacks->onEnd();
+                }
+                break;
+
+            default:
+                break;
+        }
+    }
+    else if (event_base == PROTOCOMM_TRANSPORT_BLE_EVENT)
+    {
+        switch (event_id)
+        {
+            case PROTOCOMM_TRANSPORT_BLE_CONNECTED:
+                ESP_LOGI(TAG, "BLE transport: Connected");
+                if (g_eventCallbacks && g_eventCallbacks->onBleConnected)
+                {
+                    g_eventCallbacks->onBleConnected();
+                }
+                break;
+
+            case PROTOCOMM_TRANSPORT_BLE_DISCONNECTED:
+                ESP_LOGI(TAG, "BLE transport: Disconnected");
+                if (g_eventCallbacks && g_eventCallbacks->onBleDisconnected)
+                {
+                    g_eventCallbacks->onBleDisconnected();
+                }
+                break;
+
+            default:
+                break;
+        }
+    }
+}
+
 static esp_err_t custom_endpoint_handler(uint32_t session_id,
                                          const uint8_t *inbuf,
                                          ssize_t inlen,
@@ -39,86 +166,100 @@ static esp_err_t custom_endpoint_handler(uint32_t session_id,
 {
     const char *endpoint_name = static_cast<const char *>(priv_data);
 
+    // ---- Acquire map mutex ----
+    if (g_mapMutex == nullptr || xSemaphoreTake(g_mapMutex, pdMS_TO_TICKS(5000)) == pdFALSE)
+    {
+        ESP_LOGE(TAG, "Map mutex unavailable for endpoint: %s", endpoint_name);
+        *outbuf = nullptr;
+        *outlen = 0;
+        return ESP_FAIL;
+    }
+
     auto it = g_handlerMap.find(endpoint_name);
     if (it == g_handlerMap.end())
     {
+        xSemaphoreGive(g_mapMutex);
         ESP_LOGE(TAG, "Handler not found for endpoint: %s", endpoint_name);
         return ESP_ERR_NOT_FOUND;
     }
 
-    auto &handler = it->second;
+    // Copy shared_ptr so stop() may erase the map entry concurrently after we release
+    auto handler = it->second;
     auto framerIt = g_framerMap.find(endpoint_name);
     if (framerIt == g_framerMap.end())
     {
+        xSemaphoreGive(g_mapMutex);
         ESP_LOGE(TAG, "Framer not found for endpoint: %s", endpoint_name);
         return ESP_ERR_NOT_FOUND;
     }
     auto &framer = framerIt->second;
 
-    // Feed data to framer (handles length-prefixed chunk reassembly)
+    // Feed raw BLE chunk to the length-prefixed framer
     FrameResult result = framer.onData(inbuf, inlen);
 
-    switch (result)
+    if (result == FrameResult::NEED_MORE)
     {
-        case FrameResult::NEED_MORE:
-            // Waiting for more chunks, send empty ACK
-            *outbuf = nullptr;
-            *outlen = 0;
-            return ESP_OK;
-
-        case FrameResult::COMPLETE: {
-            // Full payload received, forward to handler
-            const uint8_t *payload = framer.payload();
-            size_t payloadLen = framer.payloadSize();
-            bool success = handler->onDataReceived(session_id, payload, payloadLen, true);
-
-            // Reset framer for next transfer
-            framer.reset();
-
-            if (!success)
-            {
-                ESP_LOGE(TAG, "Handler failed for endpoint: %s", endpoint_name);
-                return ESP_FAIL;
-            }
-
-            // Get response (if any).
-            // protocomm will call free(*outbuf) — MUST use malloc here, not static buffer.
-            const size_t kMaxResponseSize = 1024;
-            uint8_t temp_buf[kMaxResponseSize];
-            size_t response_len = handler->getResponse(session_id, temp_buf, sizeof(temp_buf));
-
-            if (response_len > 0)
-            {
-                *outbuf = static_cast<uint8_t *>(malloc(response_len));
-                if (*outbuf == nullptr)
-                {
-                    ESP_LOGE(TAG, "OOM allocating response for endpoint %s", endpoint_name);
-                    *outlen = 0;
-                    return ESP_ERR_NO_MEM;
-                }
-                memcpy(*outbuf, temp_buf, response_len);
-                *outlen = static_cast<ssize_t>(response_len);
-            }
-            else
-            {
-                *outbuf = nullptr;
-                *outlen = 0;
-            }
-
-            return ESP_OK;
-        }
-
-        case FrameResult::ERROR_TOO_LARGE:
-            ESP_LOGE(TAG, "Framer error: payload too large for endpoint %s", endpoint_name);
-            framer.reset();
-            return ESP_ERR_NO_MEM;
-
-        case FrameResult::ERROR_INVALID:
-        default:
-            ESP_LOGE(TAG, "Framer error: invalid data for endpoint %s", endpoint_name);
-            framer.reset();
-            return ESP_ERR_INVALID_ARG;
+        xSemaphoreGive(g_mapMutex);
+        *outbuf = nullptr;
+        *outlen = 0;
+        return ESP_OK;
     }
+
+    if (result == FrameResult::ERROR_TOO_LARGE)
+    {
+        framer.reset();
+        xSemaphoreGive(g_mapMutex);
+        ESP_LOGE(TAG, "Framer error: payload too large for endpoint %s", endpoint_name);
+        return ESP_ERR_NO_MEM;
+    }
+
+    if (result != FrameResult::COMPLETE)
+    {
+        framer.reset();
+        xSemaphoreGive(g_mapMutex);
+        ESP_LOGE(TAG, "Framer error: invalid data for endpoint %s", endpoint_name);
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // COMPLETE: copy payload out of the framer buffer, then reset & release mutex
+    // before calling user handler (which may block or do I/O).
+    std::vector<uint8_t> payloadCopy(framer.payload(), framer.payload() + framer.payloadSize());
+    framer.reset();
+    xSemaphoreGive(g_mapMutex);
+
+    // ---- Call handler outside the mutex ----
+    bool success = handler->onDataReceived(session_id, payloadCopy.data(), payloadCopy.size(), true);
+    if (!success)
+    {
+        ESP_LOGE(TAG, "Handler failed for endpoint: %s", endpoint_name);
+        return ESP_FAIL;
+    }
+
+    // Build response (if any).
+    // protocomm will call free(*outbuf) — MUST use malloc, not a stack buffer.
+    const size_t kMaxResponseSize = 1024;
+    uint8_t temp_buf[kMaxResponseSize];
+    size_t response_len = handler->getResponse(session_id, temp_buf, sizeof(temp_buf));
+
+    if (response_len > 0)
+    {
+        *outbuf = static_cast<uint8_t *>(malloc(response_len));
+        if (*outbuf == nullptr)
+        {
+            ESP_LOGE(TAG, "OOM allocating response for endpoint %s", endpoint_name);
+            *outlen = 0;
+            return ESP_ERR_NO_MEM;
+        }
+        memcpy(*outbuf, temp_buf, response_len);
+        *outlen = static_cast<ssize_t>(response_len);
+    }
+    else
+    {
+        *outbuf = nullptr;
+        *outlen = 0;
+    }
+
+    return ESP_OK;
 }
 
 // ---------- WiFiProvisioning Implementation ----------
@@ -140,33 +281,91 @@ bool WiFiProvisioning::init(const WiFiProvisioningConfig &config)
 
     config_ = config;
 
+    // Create FreeRTOS mutex protecting g_handlerMap / g_framerMap
+    if (g_mapMutex == nullptr)
+    {
+        g_mapMutex = xSemaphoreCreateMutex();
+        if (g_mapMutex == nullptr)
+        {
+            ESP_LOGE(TAG, "Failed to create map mutex");
+            return false;
+        }
+    }
+
+    // Create FreeRTOS event group for waitForCompletion()
+    EventGroupHandle_t evtGroup = xEventGroupCreate();
+    if (evtGroup == nullptr)
+    {
+        ESP_LOGE(TAG, "Failed to create event group");
+        return false;
+    }
+    eventGroup_ = static_cast<void *>(evtGroup);
+    g_provEventGroup = evtGroup;
+
+    // Register event callbacks pointer (static, valid for init/stop lifetime)
+    g_eventCallbacks = &config_.getEventCallbacks();
+
+    // Register event handler for WIFI_PROV_EVENT
+    esp_event_handler_instance_t evtInst = nullptr;
+    esp_err_t evtErr = esp_event_handler_instance_register(WIFI_PROV_EVENT, ESP_EVENT_ANY_ID,
+                                                           &prov_event_handler, nullptr, &evtInst);
+    if (evtErr != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to register WIFI_PROV_EVENT handler: %s", esp_err_to_name(evtErr));
+        vEventGroupDelete(evtGroup);
+        eventGroup_ = nullptr;
+        g_provEventGroup = nullptr;
+        return false;
+    }
+    eventHandlerInstance_ = static_cast<void *>(evtInst);
+
+    // Register event handler for PROTOCOMM_TRANSPORT_BLE_EVENT (BLE connect/disconnect)
+    // Only relevant for BLE transport — skip for SoftAP.
+    if (config.getTransport() == ProvisioningTransport::BLE)
+    {
+        esp_event_handler_instance_t bleEvtInst = nullptr;
+        esp_err_t bleErr = esp_event_handler_instance_register(PROTOCOMM_TRANSPORT_BLE_EVENT,
+                                                               ESP_EVENT_ANY_ID, &prov_event_handler, nullptr,
+                                                               &bleEvtInst);
+        if (bleErr != ESP_OK)
+        {
+            ESP_LOGW(TAG, "Failed to register BLE transport event handler (non-fatal): %s",
+                     esp_err_to_name(bleErr));
+            // Non-fatal: BLE connect/disconnect events are optional
+        }
+        bleEventHandlerInstance_ = static_cast<void *>(bleEvtInst);
+    }
+
     // Initialize ESP-IDF wifi_prov_mgr
     wifi_prov_mgr_config_t mgr_config;
     memset(&mgr_config, 0, sizeof(mgr_config));
 
-    // Set transport scheme
+    // Set transport scheme and security event handler
     if (config.getTransport() == ProvisioningTransport::BLE)
     {
         mgr_config.scheme = wifi_prov_scheme_ble;
+        // BLE scheme event handler frees Bluetooth memory after provisioning.
+        // The level depends on the security mode chosen.
+        switch (config.getSecurity())
+        {
+            case ProvisioningSecurity::SECURITY_0:
+                mgr_config.scheme_event_handler = WIFI_PROV_EVENT_HANDLER_NONE;
+                break;
+            case ProvisioningSecurity::SECURITY_2:
+                mgr_config.scheme_event_handler = WIFI_PROV_SCHEME_BLE_EVENT_HANDLER_FREE_BT;
+                break;
+            case ProvisioningSecurity::SECURITY_1:
+            default:
+                mgr_config.scheme_event_handler = WIFI_PROV_SCHEME_BLE_EVENT_HANDLER_FREE_BTDM;
+                break;
+        }
     }
-    else
+    else // SoftAP
     {
-        ESP_LOGE(TAG, "SoftAP transport not yet implemented");
-        return false;
-    }
-
-    // Set security
-    switch (config.getSecurity())
-    {
-        case ProvisioningSecurity::SECURITY_0:
-            mgr_config.scheme_event_handler = WIFI_PROV_EVENT_HANDLER_NONE;
-            break;
-        case ProvisioningSecurity::SECURITY_1:
-            mgr_config.scheme_event_handler = WIFI_PROV_SCHEME_BLE_EVENT_HANDLER_FREE_BTDM;
-            break;
-        case ProvisioningSecurity::SECURITY_2:
-            mgr_config.scheme_event_handler = WIFI_PROV_SCHEME_BLE_EVENT_HANDLER_FREE_BT;
-            break;
+        mgr_config.scheme = wifi_prov_scheme_softap;
+        // SoftAP does not use Bluetooth; memory management not applicable.
+        mgr_config.scheme_event_handler = WIFI_PROV_EVENT_HANDLER_NONE;
+        ESP_LOGI(TAG, "Using SoftAP provisioning transport");
     }
 
     esp_err_t err = wifi_prov_mgr_init(mgr_config);
@@ -176,20 +375,35 @@ bool WiFiProvisioning::init(const WiFiProvisioningConfig &config)
         return false;
     }
 
+    // (P3-5) Set custom BLE Service UUID, if provided
+    if (config.getTransport() == ProvisioningTransport::BLE)
+    {
+        if (const auto &uuid = config.getBleServiceUuid(); uuid.has_value())
+        {
+            wifi_prov_scheme_ble_set_service_uuid(const_cast<uint8_t *>(uuid->data()));
+            ESP_LOGI(TAG, "Custom BLE Service UUID configured");
+        }
+    }
+
     // Register custom endpoints
     for (const auto &endpoint : config.getCustomEndpoints())
     {
-        // Store handler in global map (for C callbacks)
+        // Store handler and framer in global maps (protected by g_mapMutex)
+        if (xSemaphoreTake(g_mapMutex, pdMS_TO_TICKS(1000)) == pdFALSE)
+        {
+            ESP_LOGE(TAG, "Timeout acquiring mutex for endpoint: %s", endpoint.endpointName.c_str());
+            return false;
+        }
         g_handlerMap[endpoint.endpointName] = endpoint.handler;
-        handlers_[endpoint.endpointName] = endpoint.handler;
-
-        // Initialize BLE framer for this endpoint (default max size from Kconfig)
 #ifdef CONFIG_LOPCORE_PROV_BLE_MAX_PAYLOAD
         g_framerMap.insert_or_assign(endpoint.endpointName,
                                      BleDataFramer(CONFIG_LOPCORE_PROV_BLE_MAX_PAYLOAD));
 #else
-        g_framerMap.insert_or_assign(endpoint.endpointName, BleDataFramer(4096)); // Default 4KB
+        g_framerMap.insert_or_assign(endpoint.endpointName, BleDataFramer(4096));
 #endif
+        xSemaphoreGive(g_mapMutex);
+
+        handlers_[endpoint.endpointName] = endpoint.handler;
 
         // Create endpoint slot in wifi_prov_mgr.
         // Registration (wifi_prov_mgr_endpoint_register) must happen AFTER
@@ -256,10 +470,11 @@ bool WiFiProvisioning::start()
 
     // Start provisioning service
     const char *service_name = config_.getServiceName().c_str();
+    // For SoftAP, service_key is the WPA2 network password; for BLE it is unused.
+    const char *service_key = config_.getServiceKey().has_value() ? config_.getServiceKey()->c_str()
+                                                                  : nullptr;
 
-    esp_err_t err = wifi_prov_mgr_start_provisioning(security, pop, service_name,
-                                                     nullptr // service_key (for QR code, optional)
-    );
+    esp_err_t err = wifi_prov_mgr_start_provisioning(security, pop, service_name, service_key);
 
     if (err != ESP_OK)
     {
@@ -303,16 +518,88 @@ void WiFiProvisioning::stop()
     // Deinitialize
     wifi_prov_mgr_deinit();
 
-    // Clear handlers and framers
-    for (const auto &[name, handler] : handlers_)
+    // Unregister event handlers
+    if (eventHandlerInstance_)
     {
-        g_handlerMap.erase(name);
-        g_framerMap.erase(name);
+        esp_event_handler_instance_unregister(WIFI_PROV_EVENT, ESP_EVENT_ANY_ID,
+                                              static_cast<esp_event_handler_instance_t>(
+                                                  eventHandlerInstance_));
+        eventHandlerInstance_ = nullptr;
+    }
+    if (bleEventHandlerInstance_)
+    {
+        esp_event_handler_instance_unregister(PROTOCOMM_TRANSPORT_BLE_EVENT, ESP_EVENT_ANY_ID,
+                                              static_cast<esp_event_handler_instance_t>(
+                                                  bleEventHandlerInstance_));
+        bleEventHandlerInstance_ = nullptr;
+    }
+
+    // Clear global event state
+    g_eventCallbacks = nullptr;
+    if (g_provEventGroup)
+    {
+        vEventGroupDelete(g_provEventGroup);
+        g_provEventGroup = nullptr;
+    }
+    eventGroup_ = nullptr;
+
+    // Clear handlers and framers (protected by mutex so no in-flight handler sees deleted data)
+    if (g_mapMutex != nullptr && xSemaphoreTake(g_mapMutex, pdMS_TO_TICKS(5000)) == pdTRUE)
+    {
+        for (const auto &[name, handler] : handlers_)
+        {
+            g_handlerMap.erase(name);
+            g_framerMap.erase(name);
+        }
+        xSemaphoreGive(g_mapMutex);
+    }
+    else
+    {
+        ESP_LOGW(TAG, "Could not acquire map mutex during stop — skipping map cleanup");
+    }
+
+    // Delete mutex (no more callbacks after wifi_prov_mgr_deinit)
+    if (g_mapMutex != nullptr)
+    {
+        vSemaphoreDelete(g_mapMutex);
+        g_mapMutex = nullptr;
     }
 
     running_ = false;
     initialized_ = false;
     ESP_LOGI(TAG, "WiFi provisioning stopped");
+}
+
+bool WiFiProvisioning::waitForCompletion(uint32_t timeoutMs)
+{
+    if (!running_ || eventGroup_ == nullptr)
+    {
+        ESP_LOGE(TAG, "waitForCompletion: not running or event group not created");
+        return false;
+    }
+
+    EventGroupHandle_t evtGroup = static_cast<EventGroupHandle_t>(eventGroup_);
+    TickType_t ticksToWait = (timeoutMs == 0) ? portMAX_DELAY : pdMS_TO_TICKS(timeoutMs);
+
+    EventBits_t bits = xEventGroupWaitBits(evtGroup, PROV_SUCCESS_BIT | PROV_FAILURE_BIT,
+                                           pdFALSE, // do not clear bits on exit
+                                           pdFALSE, // wait for any bit
+                                           ticksToWait);
+
+    if (bits & PROV_SUCCESS_BIT)
+    {
+        ESP_LOGI(TAG, "waitForCompletion: provisioning succeeded");
+        return true;
+    }
+
+    if (bits & PROV_FAILURE_BIT)
+    {
+        ESP_LOGE(TAG, "waitForCompletion: provisioning failed");
+        return false;
+    }
+
+    ESP_LOGW(TAG, "waitForCompletion: timed out after %u ms", timeoutMs);
+    return false;
 }
 
 bool WiFiProvisioning::isProvisioned() const

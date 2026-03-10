@@ -74,6 +74,7 @@ struct AwsProvisioningResult
  * bool disconnect();
  * bool subscribe(const char* topic,
  *                std::function<void(const char*, size_t)> callback);
+ * bool unsubscribe(const char* topic);
  * bool publish(const char* topic, const char* payload, size_t length);
  * bool isConnected() const;
  * void processEvents(uint32_t timeoutMs);  // Pump MQTT loop
@@ -326,32 +327,35 @@ private:
 #endif
 
         // Subscribe to CreateCertificateFromCsr responses
-        std::string acceptCsrTopic = std::string("$aws/certificates/create-from-csr/") + format + "/accepted";
-        std::string rejectCsrTopic = std::string("$aws/certificates/create-from-csr/") + format + "/rejected";
+        csrAcceptTopic_ = std::string("$aws/certificates/create-from-csr/") + format + "/accepted";
+        csrRejectTopic_ = std::string("$aws/certificates/create-from-csr/") + format + "/rejected";
 
-        bool success = mqttClient_->subscribe(acceptCsrTopic.c_str(),
+        bool success = mqttClient_->subscribe(csrAcceptTopic_.c_str(),
                                               [this](const char *payload, size_t length) {
                                                   onCertificateAccepted(payload, length);
                                               });
 
-        success &= mqttClient_->subscribe(rejectCsrTopic.c_str(), [this](const char *payload, size_t length) {
-            onCertificateRejected(payload, length);
-        });
+        success &= mqttClient_->subscribe(csrRejectTopic_.c_str(),
+                                          [this](const char *payload, size_t length) {
+                                              onCertificateRejected(payload, length);
+                                          });
 
         // Subscribe to RegisterThing responses
         std::string templateName = config_.getTemplateName().value_or("default");
-        std::string acceptRegTopic = "$aws/provisioning-templates/" + templateName + "/provision/" + format +
-                                     "/accepted";
-        std::string rejectRegTopic = "$aws/provisioning-templates/" + templateName + "/provision/" + format +
-                                     "/rejected";
+        regAcceptTopic_ = "$aws/provisioning-templates/" + templateName + "/provision/" + format +
+                          "/accepted";
+        regRejectTopic_ = "$aws/provisioning-templates/" + templateName + "/provision/" + format +
+                          "/rejected";
 
-        success &= mqttClient_->subscribe(acceptRegTopic.c_str(), [this](const char *payload, size_t length) {
-            onRegisterThingAccepted(payload, length);
-        });
+        success &= mqttClient_->subscribe(regAcceptTopic_.c_str(),
+                                          [this](const char *payload, size_t length) {
+                                              onRegisterThingAccepted(payload, length);
+                                          });
 
-        success &= mqttClient_->subscribe(rejectRegTopic.c_str(), [this](const char *payload, size_t length) {
-            onRegisterThingRejected(payload, length);
-        });
+        success &= mqttClient_->subscribe(regRejectTopic_.c_str(),
+                                          [this](const char *payload, size_t length) {
+                                              onRegisterThingRejected(payload, length);
+                                          });
 
         return success;
     }
@@ -411,6 +415,45 @@ private:
             }
         }
         return false; // Timeout
+    }
+
+    bool waitForRegisterThingResponse_()
+    {
+        // Poll MQTT events for up to 30 seconds
+        for (int i = 0; i < 300; ++i)
+        {
+            mqttClient_->processEvents(100);
+            if (!lastResult_.deviceId.empty())
+            {
+                return true;
+            }
+        }
+        ESP_LOGE("AwsFleetProv", "waitForRegisterThingResponse_: timed out");
+        return false;
+    }
+
+    void unsubscribeCsrTopics_()
+    {
+        if (!csrAcceptTopic_.empty())
+        {
+            mqttClient_->unsubscribe(csrAcceptTopic_.c_str());
+        }
+        if (!csrRejectTopic_.empty())
+        {
+            mqttClient_->unsubscribe(csrRejectTopic_.c_str());
+        }
+    }
+
+    void unsubscribeRegisterTopics_()
+    {
+        if (!regAcceptTopic_.empty())
+        {
+            mqttClient_->unsubscribe(regAcceptTopic_.c_str());
+        }
+        if (!regRejectTopic_.empty())
+        {
+            mqttClient_->unsubscribe(regRejectTopic_.c_str());
+        }
     }
 
     bool registerThing()
@@ -497,6 +540,17 @@ private:
         lastResult_ = AwsProvisioningResult{};
         lastResult_.lastStep = AwsProvisioningStep::LOADING_CLAIM_CREDS;
 
+        // Reset per-attempt state
+        certificateReceived_.clear();
+        csrPem_.clear();
+        claimRootCa_.clear();
+        certificateId_.clear();
+        certificateOwnershipToken_.clear();
+        csrAcceptTopic_.clear();
+        csrRejectTopic_.clear();
+        regAcceptTopic_.clear();
+        regRejectTopic_.clear();
+
         // Step 1: Load claim credentials
         if (!loadClaimCredentials())
         {
@@ -541,19 +595,37 @@ private:
         lastResult_.lastStep = AwsProvisioningStep::RECEIVING_CERT;
         if (!waitForCertificate())
         {
+            unsubscribeCsrTopics_();
+            unsubscribeRegisterTopics_();
             mqttClient_->disconnect();
             return failProvisioning(AwsProvisioningStep::RECEIVING_CERT,
                                     "Failed to receive certificate from AWS");
         }
 
+        // Unsubscribe from CSR topics — no longer needed
+        unsubscribeCsrTopics_();
+
         // Step 6: Register Thing with template
         lastResult_.lastStep = AwsProvisioningStep::REGISTERING_THING;
         if (!registerThing())
         {
+            unsubscribeRegisterTopics_();
             mqttClient_->disconnect();
             return failProvisioning(AwsProvisioningStep::REGISTERING_THING,
                                     "Failed to register Thing with template");
         }
+
+        // Wait for RegisterThing response
+        if (!waitForRegisterThingResponse_())
+        {
+            unsubscribeRegisterTopics_();
+            mqttClient_->disconnect();
+            return failProvisioning(AwsProvisioningStep::REGISTERING_THING,
+                                    "Timed out waiting for RegisterThing response from AWS");
+        }
+
+        // Unsubscribe from RegisterThing topics — done
+        unsubscribeRegisterTopics_();
 
         // Step 7: Store final credentials
         lastResult_.lastStep = AwsProvisioningStep::STORING_CREDS;
@@ -686,6 +758,12 @@ private:
     std::string claimRootCa_;
     std::string certificateId_;
     std::string certificateOwnershipToken_;
+
+    // Subscribed topic strings (stored for unsubscription after each phase)
+    std::string csrAcceptTopic_;
+    std::string csrRejectTopic_;
+    std::string regAcceptTopic_;
+    std::string regRejectTopic_;
 };
 
 } // namespace prov

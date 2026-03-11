@@ -128,12 +128,13 @@ private:
 
     /**
      * Parse length prefix from buffer
-     * 
+     *
      * Reads first 4 bytes as little-endian uint32_t.
-     * 
-     * @return true if length successfully parsed
+     *
+     * @return COMPLETE on success, ERROR_INVALID for zero-length,
+     *         ERROR_TOO_LARGE if payload exceeds maxPayloadSize_
      */
-    bool parseLength();
+    FrameResult parseLength();
 };
 
 } // namespace prov

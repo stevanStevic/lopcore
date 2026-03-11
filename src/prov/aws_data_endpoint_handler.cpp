@@ -62,10 +62,11 @@ size_t AwsDataEndpointHandler::getResponse(uint32_t sessionId,
         return 0;
     }
 
-    size_t responseLen = std::min(lastResponse_.length(), maxLength - 1);
+    // protocomm uses the returned byte count as the exact transfer length —
+    // do not null-terminate; the caller (wifi_provisioning.cpp) malloc's exactly
+    // this many bytes and passes the count to the BLE transport layer.
+    size_t responseLen = std::min(lastResponse_.length(), maxLength);
     memcpy(response, lastResponse_.c_str(), responseLen);
-    response[responseLen] = '\0';
-
     return responseLen;
 }
 

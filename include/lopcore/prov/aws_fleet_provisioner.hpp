@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <map>
 #include <memory>
@@ -174,9 +175,9 @@ public:
             return false;
         }
 
-        // If Thing Name exists and we have cert manager, assume provisioned
-        // (PKCS11 cert existence check would require additional API)
-        return true;
+        // Verify the certificate actually exists in PKCS#11 — a thing name in storage
+        // without a matching cert (e.g. after partial factory reset) is not provisioned.
+        return certManager->hasFinalCertificate(config_.deviceCertLabel());
     }
 
     /**
@@ -405,10 +406,23 @@ private:
 #else
         const char *topic = "$aws/certificates/create-from-csr/json";
 
-        // Build JSON payload
-        std::string payload = "{\"certificateSigningRequest\":\"";
-        payload += csrPem_;
-        payload += "\"}";
+        // Use cJSON to encode the PEM string so that embedded \n characters are
+        // properly escaped to \\n — raw string concatenation produces invalid JSON
+        // that AWS IoT will reject with a 400 error.
+        cJSON *root = cJSON_CreateObject();
+        if (!root)
+        {
+            return false;
+        }
+        cJSON_AddStringToObject(root, "certificateSigningRequest", csrPem_.c_str());
+        char *jsonStr = cJSON_PrintUnformatted(root);
+        cJSON_Delete(root);
+        if (!jsonStr)
+        {
+            return false;
+        }
+        std::string payload(jsonStr);
+        cJSON_free(jsonStr);
 
         return mqttClient_->publish(topic, payload.c_str(), payload.length());
 #endif
@@ -416,27 +430,40 @@ private:
 
     bool waitForCertificate()
     {
-        // Poll MQTT events for up to 30 seconds
+        // Poll MQTT events for up to 30 seconds.
+        // certAccepted_ / certRejected_ are written from the MQTT event task with
+        // memory_order_release so we can safely load with memory_order_acquire here.
         for (int i = 0; i < 300; ++i)
-        { // 30 seconds / 100ms
+        {
             mqttClient_->processEvents(100);
-            if (!certificateReceived_.empty())
+            if (certAccepted_.load(std::memory_order_acquire))
             {
                 return true;
             }
+            if (certRejected_.load(std::memory_order_acquire))
+            {
+                ESP_LOGE("AwsFleetProv", "waitForCertificate: certificate request rejected by AWS");
+                return false;
+            }
         }
-        return false; // Timeout
+        ESP_LOGE("AwsFleetProv", "waitForCertificate: timed out");
+        return false;
     }
 
     bool waitForRegisterThingResponse_()
     {
-        // Poll MQTT events for up to 30 seconds
+        // Poll MQTT events for up to 30 seconds.
         for (int i = 0; i < 300; ++i)
         {
             mqttClient_->processEvents(100);
-            if (!lastResult_.deviceId.empty())
+            if (regAccepted_.load(std::memory_order_acquire))
             {
                 return true;
+            }
+            if (regRejected_.load(std::memory_order_acquire))
+            {
+                ESP_LOGE("AwsFleetProv", "waitForRegisterThingResponse_: rejected by AWS");
+                return false;
             }
         }
         ESP_LOGE("AwsFleetProv", "waitForRegisterThingResponse_: timed out");
@@ -524,15 +551,7 @@ private:
         }
 
         // Store Thing Name in config storage
-        bool success = config_.writeConfig(config_.thingNameKey(), lastResult_.deviceId);
-
-        // Store endpoint (if not already stored)
-        if (config_.getEndpoint().has_value())
-        {
-            success &= config_.writeConfig(config_.endpointKey(), config_.getEndpoint().value());
-        }
-
-        return success;
+        return config_.writeConfig(config_.thingNameKey(), lastResult_.deviceId);
     }
 
     bool failProvisioning(AwsProvisioningStep step, const std::string &error)
@@ -561,6 +580,12 @@ private:
         csrRejectTopic_.clear();
         regAcceptTopic_.clear();
         regRejectTopic_.clear();
+
+        // Reset atomic completion/rejection flags for this attempt
+        certAccepted_.store(false, std::memory_order_relaxed);
+        certRejected_.store(false, std::memory_order_relaxed);
+        regAccepted_.store(false, std::memory_order_relaxed);
+        regRejected_.store(false, std::memory_order_relaxed);
 
         // Step 1: Load claim credentials
         if (!loadClaimCredentials())
@@ -668,10 +693,12 @@ private:
             certificateId_ = response->certificateId;
             certificateOwnershipToken_ = response->ownershipToken;
             lastResult_.certificatePem = certificateReceived_;
+            certAccepted_.store(true, std::memory_order_release);
         }
         else
         {
-            certificateReceived_ = ""; // Parse failed
+            ESP_LOGE("AwsFleetProv", "onCertificateAccepted: CBOR parse failed");
+            certRejected_.store(true, std::memory_order_release);
         }
 #else
         // Parse JSON response using cJSON
@@ -700,14 +727,21 @@ private:
         if (certificateReceived_.empty())
         {
             ESP_LOGE("AwsFleetProv", "onCertificateAccepted: failed to parse response");
+            certRejected_.store(true, std::memory_order_release); // treat parse failure as rejection
+        }
+        else
+        {
+            // String writes above are ordered before this store (release semantics)
+            certAccepted_.store(true, std::memory_order_release);
         }
 #endif
     }
 
     void onCertificateRejected(const char *payload, size_t length)
     {
-        certificateReceived_ = ""; // Mark as failed
         lastResult_.errorMessage = "Certificate request rejected by AWS";
+        // Signal the wait loop to stop immediately (release so error message is visible)
+        certRejected_.store(true, std::memory_order_release);
     }
 
     void onRegisterThingAccepted(const char *payload, size_t length)
@@ -719,10 +753,12 @@ private:
         if (thingName.has_value())
         {
             lastResult_.deviceId = *thingName;
+            regAccepted_.store(true, std::memory_order_release);
         }
         else
         {
-            lastResult_.deviceId = "";
+            ESP_LOGE("AwsFleetProv", "onRegisterThingAccepted: CBOR parse failed");
+            regRejected_.store(true, std::memory_order_release);
         }
 #else
         // Parse JSON response using cJSON
@@ -734,26 +770,29 @@ private:
             if (cJSON_IsString(nameItem) && nameItem->valuestring)
             {
                 lastResult_.deviceId = nameItem->valuestring;
+                // deviceId written above; release store ensures it's visible to polling task
+                regAccepted_.store(true, std::memory_order_release);
             }
             else
             {
-                lastResult_.deviceId = "";
                 ESP_LOGE("AwsFleetProv", "onRegisterThingAccepted: thingName missing in response");
+                regRejected_.store(true, std::memory_order_release);
             }
             cJSON_Delete(root);
         }
         else
         {
-            lastResult_.deviceId = "";
             ESP_LOGE("AwsFleetProv", "onRegisterThingAccepted: JSON parse failed");
+            regRejected_.store(true, std::memory_order_release);
         }
 #endif
     }
 
     void onRegisterThingRejected(const char *payload, size_t length)
     {
-        lastResult_.deviceId = "";
         lastResult_.errorMessage = "RegisterThing rejected by AWS";
+        // Signal the wait loop to stop immediately
+        regRejected_.store(true, std::memory_order_release);
     }
 
     // ---------- Member Variables ----------
@@ -762,6 +801,14 @@ private:
     std::shared_ptr<TMqttClient> mqttClient_;
     ProvisioningStatus status_;
     AwsProvisioningResult lastResult_;
+
+    // Atomic completion/rejection flags — written from MQTT event task, read from
+    // provisioning task.  Use acquire/release ordering so associated string writes
+    // (certificateReceived_, lastResult_.*) are visible when the flag is observed.
+    std::atomic<bool> certAccepted_{false};
+    std::atomic<bool> certRejected_{false};
+    std::atomic<bool> regAccepted_{false};
+    std::atomic<bool> regRejected_{false};
 
     // State tracking
     std::string certificateReceived_;

@@ -51,9 +51,10 @@ FrameResult BleDataFramer::onData(const uint8_t* data, size_t length) {
             return FrameResult::NEED_MORE;
         }
 
-        if (!parseLength()) {
+        FrameResult parseResult = parseLength();
+        if (parseResult != FrameResult::COMPLETE) {
             error_ = true;
-            return FrameResult::ERROR_TOO_LARGE;
+            return parseResult; // ERROR_INVALID (zero length) or ERROR_TOO_LARGE (oversized)
         }
 
         lengthReceived_ = true;
@@ -110,31 +111,30 @@ void BleDataFramer::reset() {
     LOPCORE_LOGV("BleDataFramer", "Reset");
 }
 
-bool BleDataFramer::parseLength() {
+FrameResult BleDataFramer::parseLength() {
     if (buffer_.size() < 4) {
-        return false;
+        return FrameResult::ERROR_INVALID;
     }
 
     // Read first 4 bytes as little-endian uint32_t
-    expectedPayloadSize_ = 
+    expectedPayloadSize_ =
         static_cast<uint32_t>(buffer_[0]) |
         (static_cast<uint32_t>(buffer_[1]) << 8) |
         (static_cast<uint32_t>(buffer_[2]) << 16) |
         (static_cast<uint32_t>(buffer_[3]) << 24);
 
-    // Validate against maximum
     if (expectedPayloadSize_ == 0) {
         LOPCORE_LOGE("BleDataFramer", "Invalid payload length: 0");
-        return false;
+        return FrameResult::ERROR_INVALID;
     }
 
     if (expectedPayloadSize_ > maxPayloadSize_) {
-        LOPCORE_LOGE("BleDataFramer", "Payload too large: %zu > %zu (max)", 
+        LOPCORE_LOGE("BleDataFramer", "Payload too large: %zu > %zu (max)",
                      expectedPayloadSize_, maxPayloadSize_);
-        return false;
+        return FrameResult::ERROR_TOO_LARGE;
     }
 
-    return true;
+    return FrameResult::COMPLETE; // Sentinel: success
 }
 
 } // namespace prov

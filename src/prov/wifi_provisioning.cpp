@@ -55,6 +55,14 @@ static const EventBits_t PROV_FAILURE_BIT = BIT1;
 static const WiFiProvisioningEvents *g_eventCallbacks = nullptr;
 
 /**
+ * Pointer to the active WiFi storage callbacks so the static event handler
+ * can persist credentials on WIFI_PROV_CRED_RECV / WIFI_PROV_CRED_SUCCESS.
+ * Points into WiFiProvisioning::config_ (stable for init→stop lifetime).
+ * Null when no storage is configured.
+ */
+static const StorageCallbacks *g_wifiStorage = nullptr;
+
+/**
  * Event group used by waitForCompletion().
  * Aliased through eventGroup_ (stored as void*) in WiFiProvisioning.
  */
@@ -83,6 +91,12 @@ static void prov_event_handler(void *arg, esp_event_base_t event_base, int32_t e
                 std::string ssid(reinterpret_cast<const char *>(wifi_sta_cfg->ssid));
                 std::string password(reinterpret_cast<const char *>(wifi_sta_cfg->password));
                 ESP_LOGI(TAG, "Received WiFi credentials — SSID: %s", ssid.c_str());
+                // Persist credentials so they survive reboot and isProvisioned() works
+                if (g_wifiStorage)
+                {
+                    g_wifiStorage->write("wifi.ssid", ssid);
+                    g_wifiStorage->write("wifi.password", password);
+                }
                 if (g_eventCallbacks && g_eventCallbacks->onCredentialsReceived)
                 {
                     g_eventCallbacks->onCredentialsReceived(ssid, password);
@@ -109,6 +123,11 @@ static void prov_event_handler(void *arg, esp_event_base_t event_base, int32_t e
 
             case WIFI_PROV_CRED_SUCCESS:
                 ESP_LOGI(TAG, "Provisioning successful");
+                // Mark as provisioned so isProvisioned() returns true on next boot
+                if (g_wifiStorage)
+                {
+                    g_wifiStorage->write("wifi.provisioned", "1");
+                }
                 if (g_eventCallbacks && g_eventCallbacks->onSuccess)
                 {
                     g_eventCallbacks->onSuccess();
@@ -305,6 +324,9 @@ bool WiFiProvisioning::init(const WiFiProvisioningConfig &config)
     // Register event callbacks pointer (static, valid for init/stop lifetime)
     g_eventCallbacks = &config_.getEventCallbacks();
 
+    // Register storage pointer for credential persistence (null when not configured)
+    g_wifiStorage = config_.getWiFiStorage().has_value() ? &config_.getWiFiStorage().value() : nullptr;
+
     // Register event handler for WIFI_PROV_EVENT
     esp_event_handler_instance_t evtInst = nullptr;
     esp_err_t evtErr = esp_event_handler_instance_register(WIFI_PROV_EVENT, ESP_EVENT_ANY_ID,
@@ -344,21 +366,12 @@ bool WiFiProvisioning::init(const WiFiProvisioningConfig &config)
     if (config.getTransport() == ProvisioningTransport::BLE)
     {
         mgr_config.scheme = wifi_prov_scheme_ble;
-        // BLE scheme event handler frees Bluetooth memory after provisioning.
-        // The level depends on the security mode chosen.
-        switch (config.getSecurity())
-        {
-            case ProvisioningSecurity::SECURITY_0:
-                mgr_config.scheme_event_handler = WIFI_PROV_EVENT_HANDLER_NONE;
-                break;
-            case ProvisioningSecurity::SECURITY_2:
-                mgr_config.scheme_event_handler = WIFI_PROV_SCHEME_BLE_EVENT_HANDLER_FREE_BT;
-                break;
-            case ProvisioningSecurity::SECURITY_1:
-            default:
-                mgr_config.scheme_event_handler = WIFI_PROV_SCHEME_BLE_EVENT_HANDLER_FREE_BTDM;
-                break;
-        }
+        // Always free BT/BTDM memory after BLE provisioning completes.
+        // BT memory management is independent of the security level: without this
+        // the ~90 KB BT heap is never returned regardless of which security mode
+        // is used (SECURITY_0 previously left WIFI_PROV_EVENT_HANDLER_NONE here,
+        // which caused a permanent memory leak after provisioning).
+        mgr_config.scheme_event_handler = WIFI_PROV_SCHEME_BLE_EVENT_HANDLER_FREE_BTDM;
     }
     else // SoftAP
     {
@@ -536,6 +549,7 @@ void WiFiProvisioning::stop()
 
     // Clear global event state
     g_eventCallbacks = nullptr;
+    g_wifiStorage = nullptr;
     if (g_provEventGroup)
     {
         vEventGroupDelete(g_provEventGroup);

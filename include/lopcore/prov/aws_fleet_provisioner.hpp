@@ -498,40 +498,61 @@ private:
     {
         std::string templateName = config_.getTemplateName().value_or("default");
 
-        // Get device ID from provider
-        std::string deviceId;
-        auto deviceIdProvider = config_.deviceIdProvider();
-        if (deviceIdProvider)
+        // Build parameters map: start with configured extra params, then add SerialNumber if absent
+        std::map<std::string, std::string> parameters = config_.registerThingParameters();
+
+        if (parameters.find("SerialNumber") == parameters.end())
         {
-            deviceId = deviceIdProvider();
+            auto deviceIdProvider = config_.deviceIdProvider();
+            if (deviceIdProvider)
+            {
+                std::string deviceId = deviceIdProvider();
+                if (!deviceId.empty())
+                {
+                    parameters["SerialNumber"] = deviceId;
+                }
+            }
         }
 
 #ifdef CONFIG_LOPCORE_PROV_AWS_CBOR
         std::string topic = "$aws/provisioning-templates/" + templateName + "/provision/cbor";
 
-        // Generate CBOR payload with ownership token and template parameters
-        auto payload = FleetProvisioningSerializer::generateRegisterThingRequest(certificateOwnershipToken_,
-                                                                                 deviceId);
+        auto payload = FleetProvisioningSerializer::generateRegisterThingRequest(
+            certificateOwnershipToken_, parameters);
         if (!payload.has_value())
         {
             return false;
         }
 
-        return mqttClient_->publish(topic.c_str(), reinterpret_cast<const char *>(payload->data()),
-                                    payload->size());
+        return mqttClient_->publish(topic.c_str(),
+            reinterpret_cast<const char *>(payload->data()), payload->size());
 #else
         std::string topic = "$aws/provisioning-templates/" + templateName + "/provision/json";
 
-        // Build JSON payload including mandatory certificateOwnershipToken
-        std::string payload = "{\"certificateOwnershipToken\":\"" + certificateOwnershipToken_ +
-                              "\",\"parameters\":{";
-        if (!deviceId.empty())
-        {
-            payload += "\"SerialNumber\":\"" + deviceId + "\"";
-        }
-        payload += "}}";
+        // Use cJSON to properly escape all values (ownership token may contain special chars)
+        cJSON *root = cJSON_CreateObject();
+        if (!root) return false;
 
-        return mqttClient_->publish(topic.c_str(), payload.c_str(), payload.length());
+        cJSON_AddStringToObject(root, "certificateOwnershipToken",
+                                certificateOwnershipToken_.c_str());
+
+        cJSON *params = cJSON_CreateObject();
+        if (!params) { cJSON_Delete(root); return false; }
+
+        for (const auto& [k, v] : parameters)
+        {
+            cJSON_AddStringToObject(params, k.c_str(), v.c_str());
+        }
+        cJSON_AddItemToObject(root, "parameters", params);
+
+        char *jsonStr = cJSON_PrintUnformatted(root);
+        cJSON_Delete(root);
+        if (!jsonStr) return false;
+
+        std::string payloadStr(jsonStr);
+        cJSON_free(jsonStr);
+
+        return mqttClient_->publish(topic.c_str(), payloadStr.c_str(), payloadStr.length());
 #endif
     }
 

@@ -47,8 +47,19 @@ TEST(FleetProvisioningSerializer, GenerateCsrRequest_EmptyCsr_ReturnsNullopt)
 
 TEST(FleetProvisioningSerializer, GenerateRegisterThingRequest_ValidParams_ReturnsNonEmpty)
 {
-    auto result = FleetProvisioningSerializer::generateRegisterThingRequest("theOwnershipToken",
-                                                                            "AA:BB:CC:DD:EE:FF");
+    auto result = FleetProvisioningSerializer::generateRegisterThingRequest(
+        "theOwnershipToken",
+        {{"SerialNumber", "AA:BB:CC:DD:EE:FF"}});
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_GT(result->size(), 0u);
+}
+
+TEST(FleetProvisioningSerializer, GenerateRegisterThingRequest_MultipleParams_ReturnsNonEmpty)
+{
+    auto result = FleetProvisioningSerializer::generateRegisterThingRequest(
+        "theOwnershipToken",
+        {{"SerialNumber", "AA:BB:CC:DD:EE:FF"}, {"FirmwareVersion", "1.2.3"}});
 
     ASSERT_TRUE(result.has_value());
     EXPECT_GT(result->size(), 0u);
@@ -56,13 +67,15 @@ TEST(FleetProvisioningSerializer, GenerateRegisterThingRequest_ValidParams_Retur
 
 TEST(FleetProvisioningSerializer, GenerateRegisterThingRequest_EmptyToken_ReturnsNullopt)
 {
-    auto result = FleetProvisioningSerializer::generateRegisterThingRequest("", "serial");
+    auto result = FleetProvisioningSerializer::generateRegisterThingRequest(
+        "", {{"SerialNumber", "serial"}});
     EXPECT_FALSE(result.has_value());
 }
 
-TEST(FleetProvisioningSerializer, GenerateRegisterThingRequest_EmptySerial_ReturnsNullopt)
+TEST(FleetProvisioningSerializer, GenerateRegisterThingRequest_EmptyParams_ReturnsNullopt)
 {
-    auto result = FleetProvisioningSerializer::generateRegisterThingRequest("token", "");
+    auto result = FleetProvisioningSerializer::generateRegisterThingRequest(
+        "token", {});
     EXPECT_FALSE(result.has_value());
 }
 

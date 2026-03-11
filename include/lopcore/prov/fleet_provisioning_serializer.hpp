@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <map>
 #include <string>
 #include <vector>
 #include <optional>
@@ -50,22 +51,23 @@ public:
 
     /**
      * Generate RegisterThing request payload (CBOR)
-     * 
+     *
      * Payload format:
      * {
      *   "certificateOwnershipToken": "<token>",
      *   "parameters": {
-     *     "SerialNumber": "<device_id>"
+     *     "SerialNumber": "<device_id>",
+     *     ...
      *   }
      * }
-     * 
+     *
      * @param ownershipToken Certificate ownership token from CSR response
-     * @param serialNumber Device serial number or unique identifier
+     * @param parameters Key-value map of template parameters (must contain at least "SerialNumber")
      * @return CBOR-encoded payload if successful, std::nullopt on error
      */
     static std::optional<std::vector<uint8_t>> generateRegisterThingRequest(
         const std::string& ownershipToken,
-        const std::string& serialNumber);
+        const std::map<std::string, std::string>& parameters);
 
     /**
      * Parse CreateCertificateFromCsr response payload (CBOR)

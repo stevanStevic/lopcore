@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -310,6 +312,20 @@ public:
     }
 
     /**
+     * Set additional RegisterThing parameters
+     *
+     * These are merged into the "parameters" map in the RegisterThing payload.
+     * The device serial number from deviceIdProvider() is added automatically
+     * as "SerialNumber" unless overridden here.
+     *
+     * @param params Key-value pairs sent as RegisterThing parameters
+     */
+    AwsProvisioningConfig& setRegisterThingParameters(std::map<std::string, std::string> params) {
+        registerThingParameters_ = std::move(params);
+        return *this;
+    }
+
+    /**
      * Set CSR and certificate buffer sizes
      * 
      * @param csrSize CSR buffer size (default: 2048)
@@ -334,6 +350,7 @@ public:
     const std::string& deviceKeyLabel() const { return deviceKeyLabel_; }
     const std::string& csrSubjectName() const { return csrSubjectName_; }
     const std::function<std::string()>& deviceIdProvider() const { return deviceIdProvider_; }
+    const std::map<std::string, std::string>& registerThingParameters() const { return registerThingParameters_; }
     size_t csrBufferSize() const { return csrBufferSize_; }
     size_t certBufferSize() const { return certBufferSize_; }
 
@@ -360,6 +377,7 @@ private:
     std::string claimKeyLabel_;
     std::string csrSubjectName_;
     std::function<std::string()> deviceIdProvider_;
+    std::map<std::string, std::string> registerThingParameters_;
 };
 
 } // namespace prov

@@ -448,7 +448,7 @@ bool CertificateManager::pkcs11ObjectExists(const std::string &label, uint32_t o
     }
     CK_OBJECT_HANDLE handle = CK_INVALID_HANDLE;
     CK_OBJECT_CLASS ckClass = static_cast<CK_OBJECT_CLASS>(objectClass);
-    CK_RV rv = xFindObjectWithLabelAndClass(pImpl_->p11Session, label.c_str(), label.size(), ckClass,
+    CK_RV rv = xFindObjectWithLabelAndClass(pImpl_->p11Session, const_cast<char *>(label.c_str()), label.size(), ckClass,
                                             &handle);
     return (rv == CKR_OK) && (handle != CK_INVALID_HANDLE);
 #else
@@ -477,7 +477,7 @@ bool CertificateManager::pkcs11DeleteObject(const std::string &label, uint32_t o
     CK_OBJECT_CLASS ckClass = static_cast<CK_OBJECT_CLASS>(objectClass);
     CK_OBJECT_HANDLE handle = CK_INVALID_HANDLE;
 
-    rv = xFindObjectWithLabelAndClass(pImpl_->p11Session, label.c_str(), label.size(), ckClass, &handle);
+    rv = xFindObjectWithLabelAndClass(pImpl_->p11Session, const_cast<char *>(label.c_str()), label.size(), ckClass, &handle);
     bool anyDeleted = false;
     while (rv == CKR_OK && handle != CK_INVALID_HANDLE)
     {
@@ -488,7 +488,7 @@ bool CertificateManager::pkcs11DeleteObject(const std::string &label, uint32_t o
         }
         anyDeleted = true;
         // Find the next object with same label/class
-        rv = xFindObjectWithLabelAndClass(pImpl_->p11Session, label.c_str(), label.size(), ckClass, &handle);
+        rv = xFindObjectWithLabelAndClass(pImpl_->p11Session, const_cast<char *>(label.c_str()), label.size(), ckClass, &handle);
     }
 
     (void) anyDeleted;
@@ -520,7 +520,7 @@ bool CertificateManager::pkcs11GetObject(const std::string &label,
 
     CK_OBJECT_CLASS ckClass = static_cast<CK_OBJECT_CLASS>(objectClass);
     CK_OBJECT_HANDLE handle = CK_INVALID_HANDLE;
-    rv = xFindObjectWithLabelAndClass(pImpl_->p11Session, label.c_str(), label.size(), ckClass, &handle);
+    rv = xFindObjectWithLabelAndClass(pImpl_->p11Session, const_cast<char *>(label.c_str()), label.size(), ckClass, &handle);
     if (rv != CKR_OK || handle == CK_INVALID_HANDLE)
     {
         return false;

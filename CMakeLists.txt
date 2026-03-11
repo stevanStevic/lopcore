@@ -81,8 +81,11 @@ set(LOPCORE_REQUIRES
     # Note: coreMQTT and corePKCS11 are optional and added dynamically
     # if esp-aws-iot is available (see below)
     # Note: esp_littlefs is optional and added dynamically if available
-    # bt          # Optional: for BLE provisioning
 )
+
+if(CONFIG_LOPCORE_PROV_TRANSPORT_BLE)
+    list(APPEND LOPCORE_REQUIRES bt)
+endif()
 
 # =============================================================================
 # esp-aws-iot Detection (BEFORE component registration)
@@ -220,6 +223,7 @@ if(ESP_AWS_IOT_AVAILABLE)
             "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/config"
             "${ESP_AWS_IOT_PATH}/libraries/corePKCS11/corePKCS11/source/include"
             "${ESP_AWS_IOT_PATH}/libraries/corePKCS11/corePKCS11/source/dependency/3rdparty/pkcs11/published/2-40-errata-1"
+            "${ESP_AWS_IOT_PATH}/libraries/corePKCS11/corePKCS11/source/dependency/3rdparty/mbedtls_utils"
             "${ESP_AWS_IOT_PATH}/libraries/corePKCS11/config"
             "${ESP_AWS_IOT_PATH}/libraries/common/posix_compat"
             "${ESP_AWS_IOT_PATH}/libraries/backoffAlgorithm/backoffAlgorithm/source/include"

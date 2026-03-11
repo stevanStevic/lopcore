@@ -6,6 +6,17 @@
 #include "storage_types.hpp"
 #include "certificate_manager.hpp"
 
+// Claim certificate PKCS#11 label defaults (may be overridden by core_pkcs11_config.h)
+#ifdef CONFIG_LOPCORE_PROV_CERT_COREP11
+#include <core_pkcs11_config.h>
+#endif
+#ifndef pkcs11configLABEL_CLAIM_CERTIFICATE
+#define pkcs11configLABEL_CLAIM_CERTIFICATE "Claim Cert"
+#endif
+#ifndef pkcs11configLABEL_CLAIM_PRIVATE_KEY
+#define pkcs11configLABEL_CLAIM_PRIVATE_KEY "Claim Key"
+#endif
+
 namespace lopcore {
 namespace prov {
 

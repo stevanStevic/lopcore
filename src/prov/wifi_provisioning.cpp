@@ -598,7 +598,7 @@ bool WiFiProvisioning::waitForCompletion(uint32_t timeoutMs)
         return false;
     }
 
-    ESP_LOGW(TAG, "waitForCompletion: timed out after %u ms", timeoutMs);
+    ESP_LOGW(TAG, "waitForCompletion: timed out after %" PRIu32 " ms", timeoutMs);
     return false;
 }
 

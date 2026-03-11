@@ -314,7 +314,18 @@ private:
             return false;
         }
 
-        return mqttClient_->connect(endpoint->c_str(), 8883, "claim-client", claimCertPem->c_str(),
+        std::string clientId = "claim-";
+        auto deviceIdProvider = config_.deviceIdProvider();
+        if (deviceIdProvider)
+        {
+            clientId += deviceIdProvider();
+        }
+        else
+        {
+            clientId += "device";
+        }
+
+        return mqttClient_->connect(endpoint->c_str(), 8883, clientId.c_str(), claimCertPem->c_str(),
                                     claimKeyPem->c_str(), claimRootCa_.c_str());
     }
 
@@ -655,7 +666,7 @@ private:
         {
             certificateReceived_ = response->certificatePem;
             certificateId_ = response->certificateId;
-            certificateOwnershipToken_ = response->certificateOwnershipToken;
+            certificateOwnershipToken_ = response->ownershipToken;
             lastResult_.certificatePem = certificateReceived_;
         }
         else

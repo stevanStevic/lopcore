@@ -47,12 +47,12 @@ client.publishString("topic", payload, MqttQos::AT_LEAST_ONCE, false);
 
 Choose ESP-MQTT when:
 
--   ✅ You need a simple, lightweight MQTT client
--   ✅ Your broker is NOT AWS IoT Core
--   ✅ You want minimal dependencies (no submodules)
--   ✅ Asynchronous event-driven model fits your use case
--   ✅ You don't need explicit QoS state inspection
--   ✅ Standard MQTT features are sufficient
+- ✅ You need a simple, lightweight MQTT client
+- ✅ Your broker is NOT AWS IoT Core
+- ✅ You want minimal dependencies (no submodules)
+- ✅ Asynchronous event-driven model fits your use case
+- ✅ You don't need explicit QoS state inspection
+- ✅ Standard MQTT features are sufficient
 
 ### Architecture
 
@@ -73,18 +73,18 @@ Choose ESP-MQTT when:
 
 **Pros:**
 
--   Native ESP-IDF component (no external dependencies)
--   Well-tested and battle-proven in ESP32 ecosystem
--   Automatic event handling via ESP event system
--   Simple to use for basic MQTT scenarios
--   Good for general-purpose MQTT brokers
+- Native ESP-IDF component (no external dependencies)
+- Well-tested and battle-proven in ESP32 ecosystem
+- Automatic event handling via ESP event system
+- Simple to use for basic MQTT scenarios
+- Good for general-purpose MQTT brokers
 
 **Cons:**
 
--   No manual processing mode (always async)
--   Cannot inspect QoS state machine
--   Less suitable for AWS IoT advanced features
--   Harder to implement synchronous request-response patterns
+- No manual processing mode (always async)
+- Cannot inspect QoS state machine
+- Less suitable for AWS IoT advanced features
+- Harder to implement synchronous request-response patterns
 
 ### Example Use Cases
 
@@ -117,13 +117,13 @@ client.subscribe("home/lights/+/command", [](const MqttMessage& msg) {
 
 Choose CoreMQTT when:
 
--   ✅ You're connecting to **AWS IoT Core**
--   ✅ You need **Fleet Provisioning** (certificate provisioning)
--   ✅ You need **manual processing** (`processLoop()`) for synchronous workflows
--   ✅ You require **QoS state inspection** for debugging or custom logic
--   ✅ You're using **AWS IoT Device Shadow** or **AWS IoT Jobs**
--   ✅ You need **deterministic message handling** (not event-driven)
--   ✅ You want **minimal memory footprint** (~3 KB less than ESP-MQTT)
+- ✅ You're connecting to **AWS IoT Core**
+- ✅ You need **Fleet Provisioning** (certificate provisioning)
+- ✅ You need **manual processing** (`processLoop()`) for synchronous workflows
+- ✅ You require **QoS state inspection** for debugging or custom logic
+- ✅ You're using **AWS IoT Device Shadow** or **AWS IoT Jobs**
+- ✅ You need **deterministic message handling** (not event-driven)
+- ✅ You want **minimal memory footprint** (~3 KB less than ESP-MQTT)
 
 ### Architecture
 
@@ -144,18 +144,18 @@ Choose CoreMQTT when:
 
 **Pros:**
 
--   Optimized for AWS IoT Core (stateful QoS, Device Shadow, Jobs)
--   Manual processing mode via `processLoop()` for synchronous patterns
--   Can inspect QoS state arrays (debugging, custom logic)
--   Smaller memory footprint
--   Better PKCS#11 integration (hardware crypto)
--   Required for AWS IoT Fleet Provisioning
+- Optimized for AWS IoT Core (stateful QoS, Device Shadow, Jobs)
+- Manual processing mode via `processLoop()` for synchronous patterns
+- Can inspect QoS state arrays (debugging, custom logic)
+- Smaller memory footprint
+- Better PKCS#11 integration (hardware crypto)
+- Required for AWS IoT Fleet Provisioning
 
 **Cons:**
 
--   Requires `esp-aws-iot` submodule
--   Slightly more complex API (polling model)
--   Need to manage `processLoop()` calls (manual or background task)
+- Requires `esp-aws-iot` submodule
+- Slightly more complex API (polling model)
+- Need to manage `processLoop()` calls (manual or background task)
 
 ### Processing Modes
 
@@ -213,10 +213,10 @@ while (running) {
 
 **Why Manual Processing?**
 
--   **Fleet Provisioning**: Synchronous request-response (subscribe → publish → wait → response)
--   **Deterministic behavior**: Know exactly when callbacks fire
--   **Testing**: Easier to write synchronous tests
--   **Single-threaded**: Avoid multi-threading complexity
+- **Fleet Provisioning**: Synchronous request-response (subscribe → publish → wait → response)
+- **Deterministic behavior**: Know exactly when callbacks fire
+- **Testing**: Easier to write synchronous tests
+- **Single-threaded**: Avoid multi-threading complexity
 
 ### Example Use Cases
 
@@ -280,9 +280,9 @@ typedef struct MQTTPubAckInfo {
 
 **Why this matters:**
 
--   AWS IoT Device Shadow requires guaranteed delivery (QoS 1)
--   AWS IoT Jobs requires in-order processing
--   Applications can inspect state for debugging or custom logic
+- AWS IoT Device Shadow requires guaranteed delivery (QoS 1)
+- AWS IoT Jobs requires in-order processing
+- Applications can inspect state for debugging or custom logic
 
 ESP-MQTT doesn't expose this level of control.
 
@@ -302,9 +302,9 @@ AWS IoT Fleet Provisioning follows a strict request-response pattern:
 
 This **cannot be done with async-only ESP-MQTT**. You need:
 
--   Explicit control over when messages are processed
--   Ability to block waiting for specific responses
--   Deterministic timing
+- Explicit control over when messages are processed
+- Ability to block waiting for specific responses
+- Deterministic timing
 
 CoreMQTT's `processLoop()` provides this:
 
@@ -325,10 +325,10 @@ while (!responseReceived) {
 
 CoreMQTT has a smaller footprint:
 
--   No event loop integration overhead
--   Minimal state tracking
--   Explicit buffer management
--   Stack usage: ~1 KB vs ~2 KB (ESP-MQTT)
+- No event loop integration overhead
+- Minimal state tracking
+- Explicit buffer management
+- Stack usage: ~1 KB vs ~2 KB (ESP-MQTT)
 
 For constrained embedded devices, 3 KB savings matters.
 
@@ -336,9 +336,9 @@ For constrained embedded devices, 3 KB savings matters.
 
 CoreMQTT is part of FreeRTOS (AWS's RTOS):
 
--   Same API across platforms (ESP32, STM32, TI, etc.)
--   Consistent behavior for AWS IoT features
--   Well-documented and maintained by AWS
+- Same API across platforms (ESP32, STM32, TI, etc.)
+- Consistent behavior for AWS IoT features
+- Well-documented and maintained by AWS
 
 ESP-MQTT is ESP32-specific.
 
@@ -366,11 +366,13 @@ ESP-MQTT's TLS integration doesn't provide this level of control.
 ## Choosing Between EspMqttClient and CoreMqttClient
 
 Choose **`EspMqttClient`** (general-purpose, async-only):
+
 - You need a simple, lightweight MQTT client
 - Your broker is NOT AWS IoT Core
 - Asynchronous event-driven model fits your use case
 
 Choose **`CoreMqttClient`** (AWS IoT optimized, sync/async):
+
 - You're connecting to AWS IoT Core
 - You need Fleet Provisioning, Device Shadow, or Jobs
 - You need manual `processLoop()` for synchronous request-response workflows
@@ -468,37 +470,37 @@ CoreMQTT has smaller code size for the MQTT layer. TLS dependencies are similar.
 
 ### Use ESP-MQTT if:
 
--   Simple MQTT use cases (sensor data, home automation)
--   Non-AWS broker (Mosquitto, HiveMQ, etc.)
--   Async event-driven model fits your design
--   Want minimal dependencies
--   Don't need QoS state inspection
+- Simple MQTT use cases (sensor data, home automation)
+- Non-AWS broker (Mosquitto, HiveMQ, etc.)
+- Async event-driven model fits your design
+- Want minimal dependencies
+- Don't need QoS state inspection
 
 ### Use CoreMQTT if:
 
--   Connecting to AWS IoT Core
--   Need Fleet Provisioning
--   Require manual processing mode
--   Using Device Shadow or Jobs
--   Need QoS state debugging
--   Want smallest memory footprint
--   Prefer polling model over callbacks
+- Connecting to AWS IoT Core
+- Need Fleet Provisioning
+- Require manual processing mode
+- Using Device Shadow or Jobs
+- Need QoS state debugging
+- Want smallest memory footprint
+- Prefer polling model over callbacks
 
 ### Use AUTO if:
 
--   Not sure which to use
--   Want factory to decide based on configuration
--   Prototyping and will optimize later
+- Not sure which to use
+- Want factory to decide based on configuration
+- Prototyping and will optimize later
 
 ---
 
 ## Further Reading
 
--   [ESP-MQTT Documentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/protocols/mqtt.html)
--   [CoreMQTT Documentation](https://freertos.github.io/coreMQTT/)
--   [AWS IoT Core MQTT](https://docs.aws.amazon.com/iot/latest/developerguide/mqtt.html)
--   [LopCore MQTT Examples](../examples/04_mqtt_esp_client/)
--   [AWS IoT Fleet Provisioning](https://docs.aws.amazon.com/iot/latest/developerguide/provision-wo-cert.html)
+- [ESP-MQTT Documentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/protocols/mqtt.html)
+- [CoreMQTT Documentation](https://freertos.github.io/coreMQTT/)
+- [AWS IoT Core MQTT](https://docs.aws.amazon.com/iot/latest/developerguide/mqtt.html)
+- [LopCore MQTT Examples](../examples/04_mqtt_esp_client/)
+- [AWS IoT Fleet Provisioning](https://docs.aws.amazon.com/iot/latest/developerguide/provision-wo-cert.html)
 
 ---
 
@@ -506,5 +508,5 @@ CoreMQTT has smaller code size for the MQTT layer. TLS dependencies are similar.
 
 For issues, questions, or contributions:
 
--   GitHub Issues: https://github.com/stevanStevic/lopcore/issues
--   Documentation: https://github.com/stevanStevic/lopcore/tree/develop/docs
+- GitHub Issues: https://github.com/stevanStevic/lopcore/issues
+- Documentation: https://github.com/stevanStevic/lopcore/tree/develop/docs

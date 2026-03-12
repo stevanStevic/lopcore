@@ -15,13 +15,13 @@ type-safe abstractions over ESP-IDF APIs, enabling rapid development of robust I
 
 LopCore sits between your application and ESP-IDF, providing:
 
--   **Multi-Sink Logging** - Console, file, and custom outputs with rotation
--   **Unified Storage** - Single API for NVS, SPIFFS, and SD card
--   **Dual MQTT Clients** - ESP-MQTT and CoreMQTT with auto-selection
--   **Type-Safe State Machine** - Hierarchical FSM with transition validation
--   **Secure TLS** - mbedTLS with PKCS#11 hardware crypto support
--   **Type Safety** - Modern C++17 with RAII, smart pointers, `std::optional`
--   **Production Ready** - 97% test coverage, comprehensive error handling
+- **Multi-Sink Logging** - Console, file, and custom outputs with rotation
+- **Unified Storage** - Single API for NVS, SPIFFS, and SD card
+- **Dual MQTT Clients** - ESP-MQTT and CoreMQTT with auto-selection
+- **Type-Safe State Machine** - Hierarchical FSM with transition validation
+- **Secure TLS** - mbedTLS with PKCS#11 hardware crypto support
+- **Type Safety** - Modern C++17 with RAII, smart pointers, `std::optional`
+- **Production Ready** - 97% test coverage, comprehensive error handling
 
 ```
 ┌──────────────────────────────────┐
@@ -69,7 +69,8 @@ git submodule update --init --recursive
 ```cpp
 #include "lopcore/logging/logger.hpp"
 #include "lopcore/storage/storage_factory.hpp"
-#include "lopcore/mqtt/mqtt_client_factory.hpp"
+#include "lopcore/mqtt/esp_mqtt_client.hpp"
+#include "lopcore/mqtt/mqtt_config.hpp"
 
 extern "C" void app_main(void)
 {
@@ -83,15 +84,13 @@ extern "C" void app_main(void)
     config->write("wifi_ssid", "MyNetwork");
 
     // Connect MQTT
-    auto mqtt = lopcore::mqtt::MqttClientFactory::create(
-        lopcore::mqtt::MqttClientType::AUTO,
-        lopcore::mqtt::MqttConfigBuilder()
-            .broker("mqtt.example.com")
-            .port(1883)
-            .clientId("device-001")
-            .build()
-    );
-    mqtt->connect();
+    lopcore::mqtt::MqttConfig mqttConfig;
+    mqttConfig.broker = "mqtt.example.com";
+    mqttConfig.port = 1883;
+    mqttConfig.clientId = "device-001";
+
+    lopcore::mqtt::EspMqttClient mqtt(mqttConfig);
+    mqtt.connect();
 }
 ```
 
@@ -131,11 +130,11 @@ LOPCORE_LOGE("CAMERA", "Capture failed: 0x%x", err);
 
 **Features:**
 
--   5 log levels: VERBOSE, DEBUG, INFO, WARN, ERROR
--   Colored console output
--   File rotation by size
--   Runtime level changes
--   ESP-IDF integration
+- 5 log levels: VERBOSE, DEBUG, INFO, WARN, ERROR
+- Colored console output
+- File rotation by size
+- Runtime level changes
+- ESP-IDF integration
 
 ### 🔷 Storage Abstraction
 
@@ -164,11 +163,11 @@ size_t used = files->getUsedSize();
 
 **Features:**
 
--   Factory pattern for easy backend switching
--   RAII file handles (automatic cleanup)
--   `std::optional` for safe error handling
--   Binary and text data support
--   Storage usage statistics
+- Factory pattern for easy backend switching
+- RAII file handles (automatic cleanup)
+- `std::optional` for safe error handling
+- Binary and text data support
+- Storage usage statistics
 
 ### 🔷 MQTT Client
 
@@ -177,44 +176,44 @@ Dual implementation with automatic selection based on broker endpoint.
 **Quick Example:**
 
 ```cpp
-#include "lopcore/mqtt/mqtt_client_factory.hpp"
+#include "lopcore/mqtt/esp_mqtt_client.hpp"
+#include "lopcore/mqtt/mqtt_config.hpp"
 
 using namespace lopcore::mqtt;
 
 // Build configuration
-auto config = MqttConfigBuilder()
-    .broker("mqtt.example.com")
-    .port(1883)
-    .clientId("esp32-001")
-    .keepAlive(std::chrono::seconds(60))
-    .build();
+MqttConfig config;
+config.broker = "mqtt.example.com";
+config.port = 1883;
+config.clientId = "esp32-001";
+config.keepAlive = std::chrono::seconds(60);
 
-// Auto-selects best client (ESP-MQTT or CoreMQTT)
-auto client = MqttClientFactory::create(MqttClientType::AUTO, config);
+// Create client directly
+EspMqttClient client(config);
 
 // Set callbacks
-client->setConnectionCallback([](MqttConnectionState state) {
-    if (state == MqttConnectionState::CONNECTED) {
+client.setConnectionCallback([](bool connected) {
+    if (connected) {
         LOPCORE_LOGI("MQTT", "Connected!");
     }
 });
 
 // Connect and use
-client->connect();
-client->subscribe("sensors/+/data", messageHandler);
-client->publish("devices/status", payload, MqttQos::AT_LEAST_ONCE);
+client.connect();
+client.subscribe("sensors/+/data", messageHandler, MqttQos::AT_LEAST_ONCE);
+client.publishString("devices/status", payload, MqttQos::AT_LEAST_ONCE, false);
 ```
 
 **Features:**
 
--   **ESP-MQTT**: Lightweight, native ESP-IDF client (async-only)
--   **CoreMQTT**: AWS IoT optimized with manual/async modes (requires esp-aws-iot)
--   Auto-detection based on broker endpoint
--   QoS 0, 1, 2 support with stateful tracking (CoreMQTT)
--   Wildcard subscriptions (`+` and `#`)
--   Message budgeting (anti-flood)
--   Auto-reconnect with exponential backoff
--   Thread-safe operations
+- **ESP-MQTT**: Lightweight, native ESP-IDF client (async-only)
+- **CoreMQTT**: AWS IoT optimized with manual/async modes (requires esp-aws-iot)
+- Auto-detection based on broker endpoint
+- QoS 0, 1, 2 support with stateful tracking (CoreMQTT)
+- Wildcard subscriptions (`+` and `#`)
+- Message budgeting (anti-flood)
+- Auto-reconnect with exponential backoff
+- Thread-safe operations
 
 **📖 For detailed comparison and selection guide, see [MQTT Client Selection](docs/MQTT_CLIENTS.md)**
 
@@ -244,18 +243,28 @@ auto transport = std::make_shared<MbedtlsTransport>();
 transport->connect(config);
 
 // Share transport across MQTT, HTTP, etc.
-auto mqtt = MqttClientFactory::create(type, mqttConfig, transport);
+auto transport = std::make_shared<MbedtlsTransport>();
+transport->connect(tlsConfig);
+
+// CoreMQTT client with pre-configured transport
+MqttConfig mqttConfig;
+mqttConfig.broker = "iot.amazonaws.com";
+mqttConfig.port = 8883;
+mqttConfig.clientId = "device-001";
+mqttConfig.tls = tlsConfig;
+
+CoreMqttClient mqtt(mqttConfig, transport);
 ```
 
 **Features:**
 
--   mbedTLS integration
--   PKCS#11 for secure credential storage
--   Hardware secure element support (ATECC608A)
--   ALPN protocol negotiation
--   SNI (Server Name Indication)
--   Reusable transport (share across protocols)
--   Configurable timeouts and retry
+- mbedTLS integration
+- PKCS#11 for secure credential storage
+- Hardware secure element support (ATECC608A)
+- ALPN protocol negotiation
+- SNI (Server Name Indication)
+- Reusable transport (share across protocols)
+- Configurable timeouts and retry
 
 ### 🔷 State Machine
 
@@ -317,27 +326,27 @@ while (true) {
 
 **Features:**
 
--   Type-safe enum-based states (compile-time checks)
--   Entry/exit/update hooks for each state
--   Self-transitions from within update() based on conditions
--   Transition validation rules
--   Observer pattern for state change notifications
--   State history tracking
--   Clean separation of state logic
+- Type-safe enum-based states (compile-time checks)
+- Entry/exit/update hooks for each state
+- Self-transitions from within update() based on conditions
+- Transition validation rules
+- Observer pattern for state change notifications
+- State history tracking
+- Clean separation of state logic
 
 ---
 
 ## 📦 Requirements
 
--   **ESP-IDF**: v5.2.0 or later
--   **Compiler**: C++17 support (included in ESP-IDF)
--   **Hardware**: ESP32, ESP32-S2, ESP32-S3, ESP32-C3, ESP32-C6, ESP32-H2
+- **ESP-IDF**: v5.2.0 or later
+- **Compiler**: C++17 support (included in ESP-IDF)
+- **Hardware**: ESP32, ESP32-S2, ESP32-S3, ESP32-C3, ESP32-C6, ESP32-H2
 
 **Included Dependencies:**
 
--   **esp-aws-iot**: Included as submodule - enables CoreMQTT client, PKCS#11, and full AWS IoT features
-    -   Automatically fetched when cloning with `--recursive` flag
-    -   Provides CoreMQTT, corePKCS11, and AWS IoT libraries
+- **esp-aws-iot**: Included as submodule - enables CoreMQTT client, PKCS#11, and full AWS IoT features
+    - Automatically fetched when cloning with `--recursive` flag
+    - Provides CoreMQTT, corePKCS11, and AWS IoT libraries
 
 ---
 
@@ -445,19 +454,19 @@ See [examples/](examples/) for working applications you can flash to real hardwa
 
 ## 📖 Documentation
 
--   **[Examples](examples/)** - Working code samples
--   **[Testing Guide](test/README.md)** - How to run tests
--   **[Header Migration](HEADER_MIGRATION.md)** - API namespace changes
--   **[Contributing](CONTRIBUTING.md)** - Development guidelines
--   **[Changelog](CHANGELOG.md)** - Version history
--   **[Documentation](docs/)** - Comprehensive component guides
+- **[Examples](examples/)** - Working code samples
+- **[Testing Guide](test/README.md)** - How to run tests
+- **[Header Migration](HEADER_MIGRATION.md)** - API namespace changes
+- **[Contributing](CONTRIBUTING.md)** - Development guidelines
+- **[Changelog](CHANGELOG.md)** - Version history
+- **[Documentation](docs/)** - Comprehensive component guides
 
 ### Component Guides
 
--   **[MQTT Client Selection](docs/MQTT_CLIENTS.md)** - ESP-MQTT vs CoreMQTT comparison, when to use each
--   **Storage Guide** - Coming soon
--   **TLS & PKCS#11 Guide** - Coming soon
--   **State Machine Patterns** - Coming soon
+- **[MQTT Client Selection](docs/MQTT_CLIENTS.md)** - ESP-MQTT vs CoreMQTT comparison, when to use each
+- **Storage Guide** - Coming soon
+- **TLS & PKCS#11 Guide** - Coming soon
+- **State Machine Patterns** - Coming soon
 
 ### API Documentation
 
@@ -506,8 +515,13 @@ auto tlsConfig = TlsConfigBuilder()
 auto transport = std::make_shared<tls::MbedtlsTransport>();
 transport->connect(tlsConfig);
 
-auto client = MqttClientFactory::create(
-    MqttClientType::AWS_IOT, config, transport);
+MqttConfig mqttConfig;
+mqttConfig.broker = "a3xyz.iot.us-east-1.amazonaws.com";
+mqttConfig.port = 8883;
+mqttConfig.clientId = "device-001";
+mqttConfig.tls = tlsConfig;
+
+CoreMqttClient client(mqttConfig, transport);
 ```
 
 ---
@@ -516,17 +530,17 @@ auto client = MqttClientFactory::create(
 
 Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
--   Code style guidelines
--   Testing requirements
--   Pull request process
--   Development setup
+- Code style guidelines
+- Testing requirements
+- Pull request process
+- Development setup
 
 **Quick guidelines:**
 
--   Follow C++17 best practices
--   Write unit tests (80%+ coverage)
--   Document public APIs
--   Use conventional commits
+- Follow C++17 best practices
+- Write unit tests (80%+ coverage)
+- Document public APIs
+- Use conventional commits
 
 ---
 
@@ -540,9 +554,9 @@ Copyright (c) 2025 LopCore Contributors
 
 ## 🔗 Links
 
--   **ESP-IDF**: https://github.com/espressif/esp-idf
--   **esp-aws-iot**: https://github.com/espressif/esp-aws-iot
--   **Issues**: Report bugs via GitHub Issues
+- **ESP-IDF**: https://github.com/espressif/esp-idf
+- **esp-aws-iot**: https://github.com/espressif/esp-aws-iot
+- **Issues**: Report bugs via GitHub Issues
 
 ---
 
@@ -561,9 +575,9 @@ LopCore follows these principles:
 
 ## 🏆 Why LopCore?
 
--   ✅ **Production Ready** - Used in real IoT devices
--   ✅ **Well Tested** - 97% test coverage
--   ✅ **Modern C++** - Type-safe, clean APIs
--   ✅ **Documented** - Examples and inline docs
--   ✅ **Flexible** - Swap implementations easily
--   ✅ **Efficient** - Minimal overhead (~60KB flash)
+- ✅ **Production Ready** - Used in real IoT devices
+- ✅ **Well Tested** - 97% test coverage
+- ✅ **Modern C++** - Type-safe, clean APIs
+- ✅ **Documented** - Examples and inline docs
+- ✅ **Flexible** - Swap implementations easily
+- ✅ **Efficient** - Minimal overhead (~60KB flash)

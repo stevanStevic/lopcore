@@ -47,9 +47,17 @@ struct TlsConfig
     // ========================================================================
     // Certificate/key configuration (PKCS#11)
     // ========================================================================
-    std::string caCertPath;      ///< Path to CA certificate file (e.g., "/spiffs/certs/AmazonRootCA1.crt")
+    std::string caCertPath;      ///< Path to CA certificate file or inline PEM string
     std::string clientCertLabel; ///< PKCS#11 label for client certificate
     std::string clientKeyLabel;  ///< PKCS#11 label for client private key
+
+    // ========================================================================
+    // Certificate/key configuration (in-memory PEM — alternative to PKCS#11)
+    // Use these when credentials are available as PEM strings at runtime,
+    // e.g. during provisioning before they are imported into PKCS#11 storage.
+    // ========================================================================
+    std::string clientCertPem; ///< In-memory client certificate PEM (mutually exclusive with clientCertLabel)
+    std::string clientKeyPem;  ///< In-memory client private key PEM (mutually exclusive with clientKeyLabel)
 
     // ========================================================================
     // TLS protocol options
@@ -100,22 +108,30 @@ struct TlsConfig
         // Certificate validation only if peer verification enabled
         if (verifyPeer)
         {
-            if (clientCertLabel.empty())
+            bool hasPkcs11Cert = !clientCertLabel.empty();
+            bool hasInMemoryCert = !clientCertPem.empty();
+
+            if (!hasPkcs11Cert && !hasInMemoryCert)
             {
-                LOPCORE_LOGE(TAG,
-                             "Validation failed: client certificate label is required when verifyPeer=true");
+                LOPCORE_LOGE(TAG, "Validation failed: client certificate required (set clientCertLabel for "
+                                  "PKCS#11 or clientCertPem for in-memory PEM)");
                 hasError = true;
             }
 
-            if (clientKeyLabel.empty())
+            if (hasPkcs11Cert && clientKeyLabel.empty())
             {
-                LOPCORE_LOGE(TAG, "Validation failed: private key label is required when verifyPeer=true");
+                LOPCORE_LOGE(TAG, "Validation failed: private key label is required when using PKCS#11");
                 hasError = true;
             }
 
-            // When using PKCS#11 (cert/key labels), CA certificate is required for server verification
-            // This prevents the cryptic "Arguments cannot be NULL" error from mbedtls-pkcs11
-            if (!clientCertLabel.empty() && caCertPath.empty())
+            if (hasInMemoryCert && clientKeyPem.empty())
+            {
+                LOPCORE_LOGE(TAG, "Validation failed: clientKeyPem is required when clientCertPem is set");
+                hasError = true;
+            }
+
+            // When using PKCS#11, CA certificate is required for server verification
+            if (hasPkcs11Cert && caCertPath.empty())
             {
                 LOPCORE_LOGE(TAG, "Validation failed: CA certificate path is required when using PKCS#11");
                 hasError = true;
@@ -208,6 +224,27 @@ public:
     TlsConfigBuilder &privateKey(const std::string &label)
     {
         config_.clientKeyLabel = label;
+        return *this;
+    }
+
+    /**
+     * @brief Set in-memory client certificate PEM (use instead of PKCS#11 label)
+     *
+     * Intended for provisioning or testing scenarios where credentials are
+     * available as PEM strings before PKCS#11 import.
+     */
+    TlsConfigBuilder &clientCertificatePem(const std::string &pem)
+    {
+        config_.clientCertPem = pem;
+        return *this;
+    }
+
+    /**
+     * @brief Set in-memory client private key PEM (use instead of PKCS#11 label)
+     */
+    TlsConfigBuilder &privateKeyPem(const std::string &pem)
+    {
+        config_.clientKeyPem = pem;
         return *this;
     }
 

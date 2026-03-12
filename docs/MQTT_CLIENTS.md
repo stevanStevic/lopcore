@@ -12,15 +12,14 @@ LopCore provides **two MQTT client implementations**:
 1. **ESP-MQTT Client** - Espressif's native MQTT client
 2. **CoreMQTT Client** - AWS FreeRTOS MQTT library
 
-Both clients are wrapped with a unified C++ interface, providing the same API regardless of which
-implementation you choose.
+Both clients share the same interface, making it easy to switch between them:
 
 ```cpp
-// Same API for both clients
-auto client = MqttClientFactory::create(type, config);
-client->connect();
-client->subscribe("topic", callback);
-client->publish("topic", payload, qos);
+// ESP-MQTT client (general-purpose)
+lopcore::mqtt::EspMqttClient client(config);
+client.connect();
+client.subscribe("topic", callback, MqttQos::AT_LEAST_ONCE);
+client.publishString("topic", payload, MqttQos::AT_LEAST_ONCE, false);
 ```
 
 ---
@@ -91,25 +90,23 @@ Choose ESP-MQTT when:
 
 ```cpp
 // 1. Simple sensor data publishing
-auto client = MqttClientFactory::create(
-    MqttClientType::ESP_MQTT,
-    MqttConfigBuilder()
-        .broker("mqtt.mybroker.com")
-        .port(1883)
-        .clientId("sensor-001")
-        .build()
-);
+MqttConfig mqttCfg;
+mqttCfg.broker = "mqtt.mybroker.com";
+mqttCfg.port = 1883;
+mqttCfg.clientId = "sensor-001";
 
-client->setConnectionCallback([](bool connected) {
+EspMqttClient client(mqttCfg);
+
+client.setConnectionCallback([](bool connected) {
     if (connected) {
         // Start publishing sensor data
     }
 });
 
 // 2. Home automation with local broker
-client->subscribe("home/lights/+/command", [](const MqttMessage& msg) {
+client.subscribe("home/lights/+/command", [](const MqttMessage& msg) {
     // Handle light commands
-});
+}, MqttQos::AT_LEAST_ONCE);
 ```
 
 ---
@@ -169,18 +166,19 @@ CoreMQTT supports **two processing modes**:
 Background task automatically calls `processLoop()`:
 
 ```cpp
-auto client = MqttClientFactory::create(
-    MqttClientType::CORE_MQTT,
-    MqttConfigBuilder()
-        .broker("a1b2c3d4e5f6g7-ats.iot.us-east-1.amazonaws.com")
-        .port(8883)
-        .clientId("device-001")
-        .autoStartProcessLoop(true)  // Enable background task
-        .build()
-);
+// Automatic processing (async background task — default)
+MqttConfig config;
+config.broker = "a1b2c3d4e5f6g7-ats.iot.us-east-1.amazonaws.com";
+config.port = 8883;
+config.clientId = "device-001";
+config.autoStartProcessLoop = true;  // Enable background task
 
-client->connect();  // ProcessLoop task starts automatically
-client->subscribe("topic", callback);  // Messages arrive via callback
+auto transport = std::make_shared<MbedtlsTransport>();
+transport->connect(tlsConfig);
+
+CoreMqttClient client(config, transport);
+client.connect();  // ProcessLoop task starts automatically
+client.subscribe("topic", callback, MqttQos::AT_LEAST_ONCE);  // Messages arrive via callback
 ```
 
 #### 2. Manual Processing (Sync)
@@ -188,15 +186,16 @@ client->subscribe("topic", callback);  // Messages arrive via callback
 Application explicitly controls when messages are processed:
 
 ```cpp
-auto client = MqttClientFactory::create(
-    MqttClientType::CORE_MQTT,
-    MqttConfigBuilder()
-        .broker("a1b2c3d4e5f6g7-ats.iot.us-east-1.amazonaws.com")
-        .port(8883)
-        .clientId("device-001")
-        .autoStartProcessLoop(false)  // Disable background task
-        .build()
-);
+MqttConfig config;
+config.broker = "a1b2c3d4e5f6g7-ats.iot.us-east-1.amazonaws.com";
+config.port = 8883;
+config.clientId = "device-001";
+config.autoStartProcessLoop = false;  // Disable background task
+
+auto transport = std::make_shared<MbedtlsTransport>();
+transport->connect(tlsConfig);
+
+CoreMqttClient client(config, transport);
 
 client->connect();
 
@@ -223,12 +222,11 @@ while (running) {
 
 ```cpp
 // 1. AWS IoT Device Shadow
-auto client = MqttClientFactory::create(
-    MqttClientType::CORE_MQTT,
-    config
-);
+auto transport = std::make_shared<MbedtlsTransport>();
+transport->connect(tlsConfig);
+CoreMqttClient client(config, transport);
 
-client->subscribe("$aws/things/device-001/shadow/update/accepted",
+client.subscribe("$aws/things/device-001/shadow/update/accepted",
     [](const MqttMessage& msg) {
         // Handle shadow update
     }
@@ -365,82 +363,62 @@ ESP-MQTT's TLS integration doesn't provide this level of control.
 
 ---
 
-## Factory Auto-Selection
+## Choosing Between EspMqttClient and CoreMqttClient
 
-LopCore's factory can automatically choose the best client:
+Choose **`EspMqttClient`** (general-purpose, async-only):
+- You need a simple, lightweight MQTT client
+- Your broker is NOT AWS IoT Core
+- Asynchronous event-driven model fits your use case
 
-```cpp
-auto client = MqttClientFactory::create(
-    MqttClientType::AUTO,  // Let factory decide
-    config
-);
-```
-
-**Selection Logic:**
-
-1. If broker hostname contains `amazonaws.com` → **CoreMQTT**
-2. If port is 8883 (AWS IoT) → **CoreMQTT**
-3. If TLS transport provided → **CoreMQTT**
-4. Otherwise → **ESP-MQTT**
-
-**Override Auto-Selection:**
-
-```cpp
-// Force ESP-MQTT even for AWS IoT
-auto client = MqttClientFactory::create(
-    MqttClientType::ESP_MQTT,
-    config
-);
-
-// Force CoreMQTT for non-AWS broker
-auto client = MqttClientFactory::create(
-    MqttClientType::CORE_MQTT,
-    config
-);
-```
+Choose **`CoreMqttClient`** (AWS IoT optimized, sync/async):
+- You're connecting to AWS IoT Core
+- You need Fleet Provisioning, Device Shadow, or Jobs
+- You need manual `processLoop()` for synchronous request-response workflows
 
 ---
 
 ## Migration Guide
 
-### From ESP-MQTT to CoreMQTT
+### From EspMqttClient to CoreMqttClient
 
 ```cpp
-// Before: ESP-MQTT (async only)
-auto client = MqttClientFactory::create(MqttClientType::ESP_MQTT, config);
-client->connect();
-client->subscribe("topic", callback);  // Callback fires asynchronously
+// Before: EspMqttClient (async only)
+auto transport = std::make_shared<tls::MbedtlsTransport>();
+transport->connect(tlsConfig);
+EspMqttClient client(config);
+client.connect();
+client.subscribe("topic", callback, MqttQos::AT_LEAST_ONCE);  // Callback fires asynchronously
 
-// After: CoreMQTT (can be async or sync)
-auto client = MqttClientFactory::create(MqttClientType::CORE_MQTT, config);
-client->connect();  // Background task starts
-client->subscribe("topic", callback);  // Same async callback behavior
+// After: CoreMqttClient (can be async or sync)
+CoreMqttClient client(config, transport);
+client.connect();  // Background task starts
+client.subscribe("topic", callback, MqttQos::AT_LEAST_ONCE);  // Same async callback behavior
 
 // Or use manual processing:
-client->setAutoProcessing(false);
-client->subscribe("topic", callback);
+config.autoStartProcessLoop = false;
+client.subscribe("topic", callback, MqttQos::AT_LEAST_ONCE);
 while (running) {
-    client->processLoop(100);  // Callback fires here
+    client.processLoop(100);  // Callback fires here
 }
 ```
 
-### From CoreMQTT to ESP-MQTT
+### From CoreMqttClient to EspMqttClient
 
 ```cpp
-// Before: CoreMQTT with manual processing
-auto client = MqttClientFactory::create(MqttClientType::CORE_MQTT, config);
-client->setAutoProcessing(false);
+// Before: CoreMqttClient with manual processing
+CoreMqttClient client(config, transport);
+config.autoStartProcessLoop = false;
 while (running) {
-    client->processLoop(100);
+    client.processLoop(100);
     // Synchronous logic
 }
 
-// After: ESP-MQTT (must refactor to async)
-auto client = MqttClientFactory::create(MqttClientType::ESP_MQTT, config);
-client->subscribe("topic", [](const MqttMessage& msg) {
+// After: EspMqttClient (must refactor to async)
+EspMqttClient client(config);
+client.subscribe("topic", [](const MqttMessage& msg) {
     // All logic must be in callback
     // Cannot block or use synchronous patterns
-});
+}, MqttQos::AT_LEAST_ONCE);
 ```
 
 **Note:** If you rely on `processLoop()` or synchronous request-response, **you cannot migrate to ESP-MQTT**.

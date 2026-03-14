@@ -13,24 +13,22 @@
 #include <memory>
 #include <string>
 
+#include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
-
-#include "driver/gpio.h"
-#include "esp_event.h"
-#include "esp_mac.h"
-#include "esp_netif.h"
-#include "esp_system.h"
-#include "esp_wifi.h"
-#include "nvs_flash.h"
-
 #include "lopcore/logging/console_sink.hpp"
 #include "lopcore/logging/logger.hpp"
 #include "lopcore/storage/nvs_storage.hpp"
 #include "lopcore/storage/storage_config.hpp"
 
 #include "application_state_machine.hpp"
+#include "esp_event.h"
+#include "esp_mac.h"
+#include "esp_netif.h"
+#include "esp_system.h"
+#include "esp_wifi.h"
+#include "nvs_flash.h"
 
 static const char *TAG = "prov_example";
 
@@ -53,12 +51,11 @@ static constexpr const char *CSR_SUBJECT_NAME = "CN=ExampleDevice";
 // ============================================================================
 // Mock factory reset button (GPIO interrupt, active-low)
 //
-// Default: GPIO_NUM_0 (BOOT button on most ESP32 dev boards).
-// Change FACTORY_RESET_GPIO to your button pin.
+// Change FACTORY_RESET_GPI15 to your button pin.
 // For production: add debounce (e.g. 50ms software filter) and
 // hold-duration check before triggering reset.
 // ============================================================================
-static constexpr gpio_num_t FACTORY_RESET_GPIO = GPIO_NUM_0;
+static constexpr gpio_num_t FACTORY_RESET_GPIO = GPIO_NUM_15;
 
 static SemaphoreHandle_t s_resetSemaphore = nullptr;
 static lopcore::StateMachine<ApplicationState> *s_smPtr = nullptr;
@@ -86,21 +83,21 @@ static void button_task(void *arg)
 
 static void setup_factory_reset_button(lopcore::StateMachine<ApplicationState> *sm)
 {
-    s_smPtr        = sm;
+    s_smPtr = sm;
     s_resetSemaphore = xSemaphoreCreateBinary();
 
     gpio_config_t io_conf{};
-    io_conf.intr_type    = GPIO_INTR_NEGEDGE;   // falling edge = button press (active-low)
-    io_conf.mode         = GPIO_MODE_INPUT;
+    io_conf.intr_type = GPIO_INTR_NEGEDGE; // falling edge = button press (active-low)
+    io_conf.mode = GPIO_MODE_INPUT;
     io_conf.pin_bit_mask = (1ULL << FACTORY_RESET_GPIO);
-    io_conf.pull_up_en   = GPIO_PULLUP_ENABLE;
+    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
     io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
     gpio_config(&io_conf);
 
     gpio_install_isr_service(0);
     gpio_isr_handler_add(FACTORY_RESET_GPIO, factory_reset_isr_handler, nullptr);
 
-    xTaskCreate(button_task, "button_task", 2048, nullptr, 5, nullptr);
+    xTaskCreate(button_task, "button_task", 4096, nullptr, 5, nullptr);
     LOPCORE_LOGI(TAG, "Factory reset button configured on GPIO %d (active-low)", FACTORY_RESET_GPIO);
 }
 
@@ -112,8 +109,7 @@ static std::string getDeviceId()
     uint8_t mac[6] = {};
     esp_base_mac_addr_get(mac);
     char id[13];
-    snprintf(id, sizeof(id), "%02X%02X%02X%02X%02X%02X",
-             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    snprintf(id, sizeof(id), "%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     return std::string(id);
 }
 
@@ -121,7 +117,8 @@ static std::string getDeviceId()
 // Application task — runs state machine on a large stack
 // ============================================================================
 
-struct AppTaskParams {
+struct AppTaskParams
+{
     std::shared_ptr<lopcore::NvsStorage> awsNvs;
     std::string deviceId;
 };
@@ -137,10 +134,10 @@ static void app_task(void *pvParam)
 
     // Application context
     ProvisioningContext ctx;
-    ctx.awsNvs               = p->awsNvs;
-    ctx.deviceId             = p->deviceId;
-    ctx.ble_service_name     = BLE_SERVICE_NAME;
-    ctx.csr_subject_name     = CSR_SUBJECT_NAME;
+    ctx.awsNvs = p->awsNvs;
+    ctx.deviceId = p->deviceId;
+    ctx.ble_service_name = BLE_SERVICE_NAME;
+    ctx.csr_subject_name = CSR_SUBJECT_NAME;
     ctx.default_aws_endpoint = DEFAULT_AWS_ENDPOINT;
     delete p;
 
@@ -188,9 +185,7 @@ extern "C" void app_main(void)
     ESP_ERROR_CHECK(esp_wifi_start());
 
     // NVS storage (created here so it doesn't live on app_task stack)
-    auto awsNvsConfig = lopcore::storage::NvsConfig()
-                            .setNamespace(NVS_NS_AWS)
-                            .setReadOnly(false);
+    auto awsNvsConfig = lopcore::storage::NvsConfig().setNamespace(NVS_NS_AWS).setReadOnly(false);
     auto awsNvs = std::make_shared<lopcore::NvsStorage>(awsNvsConfig);
     if (!awsNvs->initialize())
     {
@@ -198,6 +193,6 @@ extern "C" void app_main(void)
         return;
     }
 
-    auto *p      = new AppTaskParams{awsNvs, getDeviceId()};
+    auto *p = new AppTaskParams{awsNvs, getDeviceId()};
     xTaskCreate(app_task, "app_task", 32768, p, 5, nullptr);
 }

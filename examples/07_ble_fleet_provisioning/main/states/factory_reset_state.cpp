@@ -8,6 +8,7 @@
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "wifi_provisioning/manager.h"
 
 static const char *TAG = "app_sm:factory_reset";
 
@@ -34,6 +35,12 @@ void FactoryResetState::onEnter()
         ctx_.awsNvs->eraseNamespace();
         LOPCORE_LOGI(TAG, "  Erased AWS provisioning config");
     }
+
+    // Reset WiFi provisioning state so BLE advertising restarts on next boot.
+    // Without this, wifi_prov_mgr_is_provisioned() still returns true from
+    // stale WiFi NVS and BLE is skipped.
+    wifi_prov_mgr_reset_provisioning();
+    LOPCORE_LOGI(TAG, "  Reset WiFi provisioning state");
 
     LOPCORE_LOGI(TAG, "");
     LOPCORE_LOGI(TAG, "Factory reset complete. Restarting in 3 seconds...");

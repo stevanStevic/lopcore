@@ -104,7 +104,7 @@ bool AwsDataEndpointHandler::parseAndStoreJson(const uint8_t *data, size_t lengt
                                     "provisioning_template"};
 
     const char *storageKeys[] = {"claim_cert", "claim_key", "aws_endpoint", "root_ca",
-                                 "provisioning_template"};
+                                 "prov_template"};
 
     for (size_t i = 0; i < 5; ++i)
     {

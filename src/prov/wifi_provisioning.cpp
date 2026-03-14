@@ -520,7 +520,7 @@ bool WiFiProvisioning::start()
 
 void WiFiProvisioning::stop()
 {
-    if (!running_)
+    if (!initialized_)
     {
         return;
     }

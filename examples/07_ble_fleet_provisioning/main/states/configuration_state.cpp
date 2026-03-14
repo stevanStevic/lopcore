@@ -40,6 +40,12 @@ void ConfigurationState::onEnter()
 
 void ConfigurationState::update()
 {
+    // Guard against race: button_task may call transition() (which calls onExit() and resets
+    // helpers) while app_task is suspended in vTaskDelay inside this function. Return early
+    // if helpers are gone — the state machine has already moved on.
+    if (!bleHelper_ || !awsHelper_)
+        return;
+
     switch (currentPhase_)
     {
         case Phase::BLE_PROVISIONING: {

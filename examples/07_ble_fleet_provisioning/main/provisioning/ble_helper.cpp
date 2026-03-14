@@ -5,6 +5,7 @@
 
 #include "lopcore/logging/logger.hpp"
 #include "lopcore/prov/storage_helpers.hpp"
+#include "wifi_provisioning/manager.h"
 
 using lopcore::prov::nvsStorage;
 using lopcore::prov::AwsDataEndpointConfig;
@@ -40,7 +41,7 @@ bool BleProvisioningHelper::start()
         {"claim_key",              awsStorage},
         {"aws_endpoint",           awsStorage},
         {"root_ca",                awsStorage},
-        {"provisioning_template",  awsStorage},
+        {"prov_template",          awsStorage},
     };
 
     awsHandler_ = std::make_shared<AwsDataEndpointHandler>(awsEndpointCfg);
@@ -58,6 +59,16 @@ bool BleProvisioningHelper::start()
         lastError_ = "WiFiProvisioning::init() failed";
         LOPCORE_LOGE(TAG, "  %s", lastError_.c_str());
         return false;
+    }
+
+    // If AWS credentials are missing from NVS, force a fresh BLE session by clearing
+    // the WiFi provisioned flag. Without this, wifi_prov_mgr sees "already provisioned"
+    // (from stale WiFi NVS) and skips BLE advertising even though AWS creds are absent.
+    auto claimCert = ctx_.awsNvs->read("claim_cert");
+    if (!claimCert.has_value() || claimCert->empty())
+    {
+        LOPCORE_LOGI(TAG, "  AWS credentials absent — resetting WiFi provisioning state");
+        wifi_prov_mgr_reset_provisioning();
     }
 
     if (!wifiProv_->start())

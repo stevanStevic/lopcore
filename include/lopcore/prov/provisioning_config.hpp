@@ -192,7 +192,7 @@ public:
         : csrBufferSize_(2048)
         , certBufferSize_(2048)
         , endpointKey_("aws_endpoint")
-        , templateKey_("provisioning_template")
+        , templateKey_("prov_template")
         , thingNameKey_("thing_name")
         , rootCaKey_("root_ca")
         , claimCertKey_("claim_cert")

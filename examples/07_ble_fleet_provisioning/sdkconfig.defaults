@@ -48,6 +48,9 @@ CONFIG_MBEDTLS_THREADING_PTHREAD=y
 CONFIG_BT_ENABLED=y
 CONFIG_BT_NIMBLE_ENABLED=y
 
+# Increase NimBLE host task stack to handle large certificate payloads (~4KB PEM)
+CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE=12288
+
 # ==============================================================================
 # WiFi
 # ==============================================================================

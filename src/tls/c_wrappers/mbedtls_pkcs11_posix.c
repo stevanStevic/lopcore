@@ -383,9 +383,24 @@ configureMbedtlsCertificates(MbedtlsPkcs11Context_t *pMbedtlsPkcs11Context,
     assert(pMbedtlsPkcs11Credentials != NULL);
     assert(pMbedtlsPkcs11Credentials->pRootCaPath != NULL);
 
-    /* Parse the server root CA certificate into the SSL context. */
-    mbedtlsError = mbedtls_x509_crt_parse_file(&(pMbedtlsPkcs11Context->rootCa),
-                                               pMbedtlsPkcs11Credentials->pRootCaPath);
+    /* Parse the server root CA certificate into the SSL context.
+     * pRootCaPath may be either:
+     *   - an inline PEM string (starts with "-----BEGIN"), or
+     *   - a filesystem path (e.g. "/spiffs/certs/AmazonRootCA1.crt").
+     * Detect which variant is present and call the appropriate mbedTLS API. */
+    if (strncmp(pMbedtlsPkcs11Credentials->pRootCaPath, "-----BEGIN", 10) == 0)
+    {
+        /* Inline PEM: mbedtls_x509_crt_parse requires length including the null terminator. */
+        mbedtlsError = mbedtls_x509_crt_parse(&(pMbedtlsPkcs11Context->rootCa),
+                                              (const unsigned char *)pMbedtlsPkcs11Credentials->pRootCaPath,
+                                              strlen(pMbedtlsPkcs11Credentials->pRootCaPath) + 1);
+    }
+    else
+    {
+        /* Filesystem path: read PEM from file (e.g. SPIFFS / LittleFS). */
+        mbedtlsError = mbedtls_x509_crt_parse_file(&(pMbedtlsPkcs11Context->rootCa),
+                                                   pMbedtlsPkcs11Credentials->pRootCaPath);
+    }
 
     if (mbedtlsError != 0)
     {
@@ -396,35 +411,75 @@ configureMbedtlsCertificates(MbedtlsPkcs11Context_t *pMbedtlsPkcs11Context,
     else
     {
         mbedtls_ssl_conf_ca_chain(&(pMbedtlsPkcs11Context->config), &(pMbedtlsPkcs11Context->rootCa), NULL);
-        /* Setup the client private key. */
-        result = initializeClientKeys(pMbedtlsPkcs11Context, pMbedtlsPkcs11Credentials->pPrivateKeyLabel);
 
-        if (result == false)
+        /* Two paths for client credentials: in-memory PEM or PKCS#11. */
+        if ((pMbedtlsPkcs11Credentials->pClientCertPem != NULL) &&
+            (pMbedtlsPkcs11Credentials->pPrivateKeyPem != NULL))
         {
-            ESP_LOGE(TAG, "Failed to setup key handling by PKCS #11.");
-            returnStatus = MBEDTLS_PKCS11_INVALID_CREDENTIALS;
+            /* --- In-memory PEM path (no PKCS#11 required) --- */
+            const unsigned char *certBuf = (const unsigned char *)pMbedtlsPkcs11Credentials->pClientCertPem;
+            size_t certLen = strlen(pMbedtlsPkcs11Credentials->pClientCertPem) + 1;
+            mbedtlsError = mbedtls_x509_crt_parse(&(pMbedtlsPkcs11Context->clientCert), certBuf, certLen);
+            if (mbedtlsError != 0)
+            {
+                ESP_LOGE(TAG, "Failed to parse client certificate PEM: %s",
+                         mbedtlsHighLevelCodeOrDefault(mbedtlsError));
+                returnStatus = MBEDTLS_PKCS11_INVALID_CREDENTIALS;
+            }
+            else
+            {
+                const unsigned char *keyBuf = (const unsigned char *)pMbedtlsPkcs11Credentials->pPrivateKeyPem;
+                size_t keyLen = strlen(pMbedtlsPkcs11Credentials->pPrivateKeyPem) + 1;
+                mbedtls_pk_init(&(pMbedtlsPkcs11Context->privKey));
+#ifdef MBEDTLS_2_X_COMPAT
+                mbedtlsError = mbedtls_pk_parse_key(&(pMbedtlsPkcs11Context->privKey),
+                                                    keyBuf, keyLen, NULL, 0);
+#else
+                mbedtlsError = mbedtls_pk_parse_key(&(pMbedtlsPkcs11Context->privKey),
+                                                    keyBuf, keyLen, NULL, 0, NULL, NULL);
+#endif
+                if (mbedtlsError != 0)
+                {
+                    ESP_LOGE(TAG, "Failed to parse private key PEM: %s",
+                             mbedtlsHighLevelCodeOrDefault(mbedtlsError));
+                    returnStatus = MBEDTLS_PKCS11_INVALID_CREDENTIALS;
+                }
+                else
+                {
+                    (void)mbedtls_ssl_conf_own_cert(&(pMbedtlsPkcs11Context->config),
+                                                    &(pMbedtlsPkcs11Context->clientCert),
+                                                    &(pMbedtlsPkcs11Context->privKey));
+                }
+            }
         }
-    }
-
-    if (returnStatus == MBEDTLS_PKCS11_SUCCESS)
-    {
-        /* Setup the client certificate. */
-        result = readCertificateIntoContext(pMbedtlsPkcs11Context,
-                                            pMbedtlsPkcs11Credentials->pClientCertLabel,
-                                            &(pMbedtlsPkcs11Context->clientCert));
-
-        if (result == false)
+        else
         {
-            ESP_LOGE(TAG, "Failed to get certificate from PKCS #11 module.");
-            returnStatus = MBEDTLS_PKCS11_INVALID_CREDENTIALS;
-        }
-    }
+            /* --- PKCS#11 path --- */
+            result = initializeClientKeys(pMbedtlsPkcs11Context, pMbedtlsPkcs11Credentials->pPrivateKeyLabel);
 
-    if (returnStatus == MBEDTLS_PKCS11_SUCCESS)
-    {
-        (void) mbedtls_ssl_conf_own_cert(&(pMbedtlsPkcs11Context->config),
-                                         &(pMbedtlsPkcs11Context->clientCert),
-                                         &(pMbedtlsPkcs11Context->privKey));
+            if (result == false)
+            {
+                ESP_LOGE(TAG, "Failed to setup key handling by PKCS #11.");
+                returnStatus = MBEDTLS_PKCS11_INVALID_CREDENTIALS;
+            }
+            else
+            {
+                result = readCertificateIntoContext(pMbedtlsPkcs11Context,
+                                                    pMbedtlsPkcs11Credentials->pClientCertLabel,
+                                                    &(pMbedtlsPkcs11Context->clientCert));
+                if (result == false)
+                {
+                    ESP_LOGE(TAG, "Failed to get certificate from PKCS #11 module.");
+                    returnStatus = MBEDTLS_PKCS11_INVALID_CREDENTIALS;
+                }
+                else
+                {
+                    (void)mbedtls_ssl_conf_own_cert(&(pMbedtlsPkcs11Context->config),
+                                                    &(pMbedtlsPkcs11Context->clientCert),
+                                                    &(pMbedtlsPkcs11Context->privKey));
+                }
+            }
+        }
     }
 
     return returnStatus;
@@ -783,10 +838,16 @@ MbedtlsPkcs11Status_t Mbedtls_Pkcs11_Connect(NetworkContext_t *pNetworkContext,
     int32_t mbedtlsError = 0;
     char portStr[6] = {0};
 
+    /* Must have either PKCS#11 labels OR in-memory PEM credentials, but not neither */
+    bool hasPkcs11Creds = (pMbedtlsPkcs11Credentials != NULL) &&
+                          (pMbedtlsPkcs11Credentials->pClientCertLabel != NULL) &&
+                          (pMbedtlsPkcs11Credentials->pPrivateKeyLabel != NULL);
+    bool hasPemCreds    = (pMbedtlsPkcs11Credentials != NULL) &&
+                          (pMbedtlsPkcs11Credentials->pClientCertPem != NULL) &&
+                          (pMbedtlsPkcs11Credentials->pPrivateKeyPem != NULL);
     if ((pNetworkContext == NULL) || (pNetworkContext->pParams == NULL) || (pHostName == NULL) ||
         (pMbedtlsPkcs11Credentials == NULL) || (pMbedtlsPkcs11Credentials->pRootCaPath == NULL) ||
-        (pMbedtlsPkcs11Credentials->pClientCertLabel == NULL) ||
-        (pMbedtlsPkcs11Credentials->pPrivateKeyLabel == NULL))
+        (!hasPkcs11Creds && !hasPemCreds))
     {
         ESP_LOGE(TAG,
                  "Invalid input parameter(s): Arguments cannot be NULL. pNetworkContext=%p, "

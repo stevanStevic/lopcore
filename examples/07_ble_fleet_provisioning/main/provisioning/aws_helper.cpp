@@ -25,7 +25,7 @@ bool AwsProvisioningHelper::provision()
     ctx_.prov_data.claim_key            = ctx_.awsNvs->read("claim_key");
     ctx_.prov_data.aws_endpoint         = ctx_.awsNvs->read("aws_endpoint");
     ctx_.prov_data.root_ca              = ctx_.awsNvs->read("root_ca");
-    ctx_.prov_data.provisioning_template = ctx_.awsNvs->read("provisioning_template");
+    ctx_.prov_data.provisioning_template = ctx_.awsNvs->read("prov_template");
 
     // Fallback to compile-time endpoint if BLE did not provide one
     if (!ctx_.prov_data.aws_endpoint.has_value() || ctx_.prov_data.aws_endpoint->empty())
@@ -94,7 +94,7 @@ bool AwsProvisioningHelper::provision()
         .addConfigStorage("claim_key",              awsStorage)
         .addConfigStorage("aws_endpoint",           awsStorage)
         .addConfigStorage("root_ca",                awsStorage)
-        .addConfigStorage("provisioning_template",  awsStorage);
+        .addConfigStorage("prov_template",           awsStorage);
 
     mqttAdapter_ = std::make_shared<ProvisioningMqttAdapter>();
     AwsFleetProvisioner<ProvisioningMqttAdapter> provisioner(awsCfg, mqttAdapter_);

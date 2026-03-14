@@ -28,6 +28,10 @@ bool ProvisioningMqttAdapter::connect(const char *endpoint,
     tlsCfg.caCertPath   = rootCaPem;
     tlsCfg.clientCertPem = certPem;
     tlsCfg.clientKeyPem  = keyPem;
+    // Short recv timeout so the background processLoopTask releases mutex_ quickly.
+    // Default is 10s — causes 10-second pauses between every subscribe/publish
+    // because processLoopTask holds mutex_ while mbedtls_ssl_read blocks.
+    tlsCfg.recvTimeout  = std::chrono::milliseconds(200);
 
     // Step 2: Create and connect transport BEFORE constructing CoreMqttClient.
     // CoreMqttClient constructor requires an already-connected ITlsTransport.
@@ -112,6 +116,9 @@ bool ProvisioningMqttAdapter::isConnected() const
 
 void ProvisioningMqttAdapter::processEvents(uint32_t timeoutMs)
 {
-    if (client_)
-        client_->processLoop(timeoutMs > 0 ? timeoutMs : 10);
+    // CoreMqttClient already drives its own background processLoopTask.
+    // Calling processLoop() here from the provisioning task would compete for
+    // the same mutex, causing contention without benefit. Just yield so the
+    // background task can process incoming MQTT messages and fire callbacks.
+    vTaskDelay(pdMS_TO_TICKS(timeoutMs > 0 ? timeoutMs : 10));
 }

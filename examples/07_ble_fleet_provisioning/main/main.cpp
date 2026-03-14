@@ -2,91 +2,125 @@
  * @file main.cpp
  * @brief BLE + AWS Fleet Provisioning Example with State Machine
  *
- * Demonstrates professional application architecture using a state machine:
- *
- *  States:
- *  ──────
- *  1. INIT — Check provisioning status, initialize system
- *  2. CONFIGURATION — BLE WiFi provisioning + AWS Fleet Provisioning (with retry)
- *  3. NOMINAL — Normal operation (app-ready idle loop)
- *  4. FACTORY_RESET — Erase NVS and restart
- *
- * This pattern mirrors production systems. Provisioning is encapsulated as a
- * single CONFIGURATION state with an internal phase machine,
- * allowing clean separation of concerns and extensibility.
- *
- * @copyright Copyright (c) 2025 LopCore Contributors
- * @license MIT License
+ * Demonstrates:
+ *  - StateMachine<ApplicationState> with transition rules and observer
+ *  - BLE + AWS Fleet Provisioning in CONFIGURATION state
+ *  - DEGRADED state for WiFi reconnection
+ *  - GPIO interrupt-driven factory reset button
+ *  - lopcore: Logger, NvsStorage, StateMachine, WiFiProvisioning, CoreMqttClient
  */
-
 #include <cstring>
 #include <memory>
 #include <string>
 
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 
-// LopCore components
+#include "driver/gpio.h"
+#include "esp_event.h"
+#include "esp_mac.h"
+#include "esp_system.h"
+#include "nvs_flash.h"
+
 #include "lopcore/logging/console_sink.hpp"
 #include "lopcore/logging/logger.hpp"
 #include "lopcore/storage/nvs_storage.hpp"
 #include "lopcore/storage/storage_config.hpp"
 
-// State machine
 #include "application_state_machine.hpp"
-
-// Provisioning helpers
-#include "provisioning_helpers.hpp"
-
-// ESP-IDF
-#include "esp_event.h"
-#include "esp_log.h"
-#include "esp_mac.h"
-#include "esp_system.h"
-#include "nvs_flash.h"
 
 static const char *TAG = "prov_example";
 
 // ============================================================================
-// Configuration
+// Configuration — edit these constants for your setup
 // ============================================================================
 
-// BLE device name visible to mobile apps
+// BLE device name visible to the provisioning app (esp_prov.py or mobile)
 static constexpr const char *BLE_SERVICE_NAME = "PROV_EXAMPLE";
 
-// NVS namespace for AWS provisioning config
+// NVS namespace for AWS provisioning credentials and Thing Name
 static constexpr const char *NVS_NS_AWS = "prov_aws";
 
-// AWS IoT endpoint (may be overridden via BLE)
+// Compile-time AWS IoT endpoint fallback (can be overridden by BLE provisioning)
 static constexpr const char *DEFAULT_AWS_ENDPOINT = "";
 
-// CSR subject name embedded in the device certificate
+// CSR subject name for the device certificate generated during Fleet Provisioning
 static constexpr const char *CSR_SUBJECT_NAME = "CN=ExampleDevice";
 
 // ============================================================================
-// Helper: Get device ID from MAC address
+// Mock factory reset button (GPIO interrupt, active-low)
+//
+// Default: GPIO_NUM_0 (BOOT button on most ESP32 dev boards).
+// Change FACTORY_RESET_GPIO to your button pin.
+// For production: add debounce (e.g. 50ms software filter) and
+// hold-duration check before triggering reset.
 // ============================================================================
+static constexpr gpio_num_t FACTORY_RESET_GPIO = GPIO_NUM_0;
 
+static SemaphoreHandle_t s_resetSemaphore = nullptr;
+static lopcore::StateMachine<ApplicationState> *s_smPtr = nullptr;
+
+static void IRAM_ATTR factory_reset_isr_handler(void *arg)
+{
+    // ISR: minimal work — post semaphore, let task do the transition
+    BaseType_t higherPriorityTaskWoken = pdFALSE;
+    xSemaphoreGiveFromISR(s_resetSemaphore, &higherPriorityTaskWoken);
+    portYIELD_FROM_ISR(higherPriorityTaskWoken);
+}
+
+static void button_task(void *arg)
+{
+    while (true)
+    {
+        if (xSemaphoreTake(s_resetSemaphore, portMAX_DELAY) == pdTRUE)
+        {
+            LOPCORE_LOGI(TAG, "[button] Factory reset triggered via GPIO %d", FACTORY_RESET_GPIO);
+            if (s_smPtr)
+                s_smPtr->transition(ApplicationState::FACTORY_RESET);
+        }
+    }
+}
+
+static void setup_factory_reset_button(lopcore::StateMachine<ApplicationState> *sm)
+{
+    s_smPtr        = sm;
+    s_resetSemaphore = xSemaphoreCreateBinary();
+
+    gpio_config_t io_conf{};
+    io_conf.intr_type    = GPIO_INTR_NEGEDGE;   // falling edge = button press (active-low)
+    io_conf.mode         = GPIO_MODE_INPUT;
+    io_conf.pin_bit_mask = (1ULL << FACTORY_RESET_GPIO);
+    io_conf.pull_up_en   = GPIO_PULLUP_ENABLE;
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    gpio_config(&io_conf);
+
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(FACTORY_RESET_GPIO, factory_reset_isr_handler, nullptr);
+
+    xTaskCreate(button_task, "button_task", 2048, nullptr, 5, nullptr);
+    LOPCORE_LOGI(TAG, "Factory reset button configured on GPIO %d (active-low)", FACTORY_RESET_GPIO);
+}
+
+// ============================================================================
+// Device ID from MAC address
+// ============================================================================
 static std::string getDeviceId()
 {
     uint8_t mac[6] = {};
     esp_base_mac_addr_get(mac);
-    char id[18];
-    snprintf(id, sizeof(id), "%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    char id[13];
+    snprintf(id, sizeof(id), "%02X%02X%02X%02X%02X%02X",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     return std::string(id);
 }
 
 // ============================================================================
 // app_main
 // ============================================================================
-
 extern "C" void app_main(void)
 {
-    // =========================================================================
-    // System Initialization
-    // =========================================================================
-
-    // Initialize NVS flash partition
+    // Initialize NVS flash
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
     {
@@ -95,57 +129,52 @@ extern "C" void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    // Create default event loop (required by WiFi, BLE, and ESP-MQTT)
+    // Default event loop (required by WiFi, BLE, ESP-MQTT)
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    // Initialize LopCore logger with console sink
+    // Initialize lopcore logger with console sink
     auto &logger = lopcore::Logger::getInstance();
     logger.addSink(std::make_unique<lopcore::ConsoleSink>());
     logger.setGlobalLevel(lopcore::LogLevel::INFO);
 
-    // =========================================================================
-    // Create NVS Storage Instance
-    // =========================================================================
-
-    auto awsNvsConfig = lopcore::storage::NvsConfig().setNamespace(NVS_NS_AWS).setReadOnly(false);
+    // NVS storage for AWS provisioning data
+    auto awsNvsConfig = lopcore::storage::NvsConfig()
+                            .setNamespace(NVS_NS_AWS)
+                            .setReadOnly(false);
     auto awsNvs = std::make_shared<lopcore::NvsStorage>(awsNvsConfig);
-
     if (!awsNvs->initialize())
     {
-        LOPCORE_LOGE(TAG, "Failed to initialize AWS NVS namespace '%s'", NVS_NS_AWS);
+        LOPCORE_LOGE(TAG, "Failed to initialize NVS namespace '%s'", NVS_NS_AWS);
         return;
     }
 
-    // =========================================================================
-    // Create Application Context
-    // =========================================================================
-
+    // Application context
     ProvisioningContext ctx;
-    ctx.awsNvs = awsNvs;
-    ctx.deviceId = getDeviceId();
-    ctx.ble_service_name = BLE_SERVICE_NAME;
-    ctx.csr_subject_name = CSR_SUBJECT_NAME;
+    ctx.awsNvs              = awsNvs;
+    ctx.deviceId            = getDeviceId();
+    ctx.ble_service_name    = BLE_SERVICE_NAME;
+    ctx.csr_subject_name    = CSR_SUBJECT_NAME;
     ctx.default_aws_endpoint = DEFAULT_AWS_ENDPOINT;
 
-    // =========================================================================
-    // Create and Initialize State Machine
-    // =========================================================================
-
+    // Create state machine
     auto sm = createApplicationStateMachine(ctx);
-    sm->initialize(ApplicationState::INIT);
 
-    // =========================================================================
-    // Main Loop
-    // =========================================================================
+    // Setup factory reset button (GPIO interrupt)
+    setup_factory_reset_button(sm.get());
 
-    LOPCORE_LOGI(TAG, "State machine initialized. Entering main loop...");
+    // Banner — logged here because StateMachine constructor does not call
+    // onEnter() for the initial state; first update() drives InitState::update()
+    LOPCORE_LOGI(TAG, "===========================================");
+    LOPCORE_LOGI(TAG, "LopCore BLE Fleet Provisioning Example");
+    LOPCORE_LOGI(TAG, "===========================================");
+    LOPCORE_LOGI(TAG, "Device ID: %s", ctx.deviceId.c_str());
+    LOPCORE_LOGI(TAG, "State machine ready. Starting in INIT...");
+    LOPCORE_LOGI(TAG, "");
 
-    while (sm->isRunning())
+    // Main loop — StateMachine has no isRunning(); loop forever
+    while (true)
     {
         sm->update();
-        vTaskDelay(pdMS_TO_TICKS(100)); // 100 ms cycle
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
-
-    // Should not reach here (NominalState runs forever)
-    LOPCORE_LOGE(TAG, "State machine stopped unexpectedly");
 }

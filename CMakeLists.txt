@@ -39,11 +39,14 @@ set(LOPCORE_SRCS
     # State Machine subsystem (header-only template)
     # No .cpp files needed - template implementation in headers
 
-    # Provisioning (Future)
-    # "src/provisioning/provisioning_manager.cpp"
-    # "src/provisioning/ble_provisioner.cpp"
-    # "src/provisioning/wifi_provisioner.cpp"
-    # "src/provisioning/aws_provision_handler.cpp"
+    # Provisioning subsystem (conditional - enabled via Kconfig)
+    # Will be removed from build if CONFIG_LOPCORE_ENABLE_PROVISIONING is not set
+    "src/prov/storage_helpers.cpp"
+    "src/prov/certificate_manager.cpp"
+    "src/prov/wifi_provisioning.cpp"
+    "src/prov/fleet_provisioning_serializer.cpp"
+    "src/prov/ble_data_framer.cpp"
+    "src/prov/aws_data_endpoint_handler.cpp"
 
     # Commands (Future)
     # "src/commands/command_router.cpp"
@@ -73,11 +76,16 @@ set(LOPCORE_REQUIRES
     mqtt          # ESP-IDF native MQTT (for EspMqttClient)
     mbedtls
     json
+    wifi_provisioning  # For BLE/WiFi provisioning
+    protocomm          # Protocol communication (used by wifi_provisioning)
     # Note: coreMQTT and corePKCS11 are optional and added dynamically
     # if esp-aws-iot is available (see below)
     # Note: esp_littlefs is optional and added dynamically if available
-    # bt          # Optional: for BLE provisioning
 )
+
+if(CONFIG_LOPCORE_PROV_TRANSPORT_BLE)
+    list(APPEND LOPCORE_REQUIRES bt)
+endif()
 
 # =============================================================================
 # esp-aws-iot Detection (BEFORE component registration)
@@ -128,6 +136,46 @@ else()
 endif()
 
 # =============================================================================
+# Provisioning Subsystem Detection
+# =============================================================================
+
+# Check if provisioning is enabled in Kconfig
+if(NOT CONFIG_LOPCORE_ENABLE_PROVISIONING)
+    message(STATUS "LopCore: Provisioning DISABLED (not enabled in Kconfig)")
+    # Remove all provisioning sources
+    list(REMOVE_ITEM LOPCORE_SRCS
+        "src/prov/storage_helpers.cpp"
+        "src/prov/certificate_manager.cpp"
+        "src/prov/wifi_provisioning.cpp"
+        "src/prov/fleet_provisioning_serializer.cpp"
+        "src/prov/ble_data_framer.cpp"
+        "src/prov/aws_data_endpoint_handler.cpp"
+    )
+else()
+    message(STATUS "LopCore: Provisioning ENABLED")
+    
+    # Check for CBOR component (for Fleet Provisioning serialization)
+    if(CONFIG_LOPCORE_PROV_AWS_CBOR)
+        if("espressif__cbor" IN_LIST build_components OR "cbor" IN_LIST build_components)
+            message(STATUS "LopCore: CBOR available for Fleet Provisioning")
+            if("espressif__cbor" IN_LIST build_components)
+                list(APPEND LOPCORE_REQUIRES espressif__cbor)
+            else()
+                list(APPEND LOPCORE_REQUIRES cbor)
+            endif()
+        else()
+            message(WARNING "LopCore: CBOR not found, Fleet Provisioning will use JSON instead")
+        endif()
+    endif()
+
+    # Add Fleet Provisioning SDK when AWS fleet provisioning is enabled
+    if(CONFIG_LOPCORE_PROV_AWS_FLEET AND ESP_AWS_IOT_AVAILABLE)
+        message(STATUS "LopCore: AWS Fleet Provisioning enabled")
+        # Fleet Provisioning library will be added to includes later
+    endif()
+endif()
+
+# =============================================================================
 # Component Registration
 # =============================================================================
 
@@ -166,6 +214,8 @@ if(ESP_AWS_IOT_AVAILABLE)
             "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/coreMQTT/source/core_mqtt_state.c"
             "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/coreMQTT/source/core_mqtt_serializer.c"
             "${ESP_AWS_IOT_PATH}/libraries/backoffAlgorithm/backoffAlgorithm/source/backoff_algorithm.c"
+            "${ESP_AWS_IOT_PATH}/libraries/common/posix_compat/clock_esp.c"
+            "${ESP_AWS_IOT_PATH}/libraries/common/posix_compat/semaphore.c"
         )
 
         # Add esp-aws-iot include directories for coreMQTT and corePKCS11
@@ -175,6 +225,7 @@ if(ESP_AWS_IOT_AVAILABLE)
             "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/config"
             "${ESP_AWS_IOT_PATH}/libraries/corePKCS11/corePKCS11/source/include"
             "${ESP_AWS_IOT_PATH}/libraries/corePKCS11/corePKCS11/source/dependency/3rdparty/pkcs11/published/2-40-errata-1"
+            "${ESP_AWS_IOT_PATH}/libraries/corePKCS11/corePKCS11/source/dependency/3rdparty/mbedtls_utils"
             "${ESP_AWS_IOT_PATH}/libraries/corePKCS11/config"
             "${ESP_AWS_IOT_PATH}/libraries/common/posix_compat"
             "${ESP_AWS_IOT_PATH}/libraries/backoffAlgorithm/backoffAlgorithm/source/include"
@@ -184,6 +235,24 @@ if(ESP_AWS_IOT_AVAILABLE)
         target_compile_definitions(${COMPONENT_LIB} PUBLIC
             LOPCORE_COREMQTT_ENABLED=1
         )
+
+        # Add Fleet Provisioning SDK sources and includes if provisioning enabled
+        if(CONFIG_LOPCORE_PROV_AWS_FLEET)
+            target_sources(${COMPONENT_LIB} PRIVATE
+                "${ESP_AWS_IOT_PATH}/libraries/Fleet-Provisioning-for-AWS-IoT-embedded-sdk/Fleet-Provisioning-for-AWS-IoT-embedded-sdk/source/fleet_provisioning.c"
+            )
+
+            target_include_directories(${COMPONENT_LIB} PRIVATE
+                "${ESP_AWS_IOT_PATH}/libraries/Fleet-Provisioning-for-AWS-IoT-embedded-sdk/Fleet-Provisioning-for-AWS-IoT-embedded-sdk/source/include"
+                "${ESP_AWS_IOT_PATH}/libraries/Fleet-Provisioning-for-AWS-IoT-embedded-sdk/config"
+            )
+
+            target_compile_definitions(${COMPONENT_LIB} PUBLIC
+                LOPCORE_PROV_AWS_FLEET_ENABLED=1
+            )
+
+            message(STATUS "LopCore: Fleet Provisioning SDK integrated")
+        endif()
 
         message(STATUS "LopCore: CoreMQTT client enabled via esp-aws-iot")
     else()
@@ -226,6 +295,27 @@ target_compile_definitions(${COMPONENT_LIB} PUBLIC
 )
 
 # =============================================================================
+# Provisioning System Compile Definitions
+# =============================================================================
+
+if(CONFIG_LOPCORE_ENABLE_PROVISIONING)
+    target_compile_definitions(${COMPONENT_LIB} PUBLIC
+        LOPCORE_PROVISIONING_ENABLED=1
+    )
+
+    # Certificate backend selection
+    if(CONFIG_LOPCORE_PROV_CERT_COREP11)
+        target_compile_definitions(${COMPONENT_LIB} PUBLIC
+            LOPCORE_PROV_CERT_COREP11_ENABLED=1
+        )
+    elseif(CONFIG_LOPCORE_PROV_CERT_MBEDTLS_ONLY)
+        target_compile_definitions(${COMPONENT_LIB} PUBLIC
+            LOPCORE_PROV_CERT_MBEDTLS_ONLY_ENABLED=1
+        )
+    endif()
+endif()
+
+# =============================================================================
 # Build Summary
 # =============================================================================
 
@@ -236,14 +326,31 @@ message(STATUS "  Logging:        ENABLED")
 message(STATUS "  Storage:        ENABLED")
 message(STATUS "  TLS:            ENABLED")
 message(STATUS "  MQTT:           ENABLED")
-if(ESP_AWS_IOT_FOUND)
+if(ESP_AWS_IOT_AVAILABLE)
     message(STATUS "    - ESP-MQTT:   ENABLED")
     message(STATUS "    - CoreMQTT:   ENABLED (via esp-aws-iot)")
 else()
     message(STATUS "    - ESP-MQTT:   ENABLED")
     message(STATUS "    - CoreMQTT:   DISABLED (esp-aws-iot not found)")
 endif()
-message(STATUS "  Provisioning:   DISABLED (future)")
+if(CONFIG_LOPCORE_ENABLE_PROVISIONING)
+    message(STATUS "  Provisioning:   ENABLED")
+    if(CONFIG_LOPCORE_PROV_AWS_FLEET)
+        message(STATUS "    - AWS Fleet:  ENABLED")
+        if(CONFIG_LOPCORE_PROV_AWS_CBOR)
+            message(STATUS "      Payload:    CBOR")
+        else()
+            message(STATUS "      Payload:    JSON")
+        endif()
+    endif()
+    if(CONFIG_LOPCORE_PROV_CERT_COREP11)
+        message(STATUS "    - Cert Mgmt:  corePKCS11")
+    elseif(CONFIG_LOPCORE_PROV_CERT_MBEDTLS_ONLY)
+        message(STATUS "    - Cert Mgmt:  mbedTLS only")
+    endif()
+else()
+    message(STATUS "  Provisioning:   DISABLED")
+endif()
 message(STATUS "  State Machine:  DISABLED (future)")
 message(STATUS "  Commands:       DISABLED (future)")
 message(STATUS "========================================")

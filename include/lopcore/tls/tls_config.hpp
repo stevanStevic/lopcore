@@ -47,9 +47,17 @@ struct TlsConfig
     // ========================================================================
     // Certificate/key configuration (PKCS#11)
     // ========================================================================
-    std::string caCertPath;      ///< Path to CA certificate file (e.g., "/spiffs/certs/AmazonRootCA1.crt")
+    std::string caCertPath;      ///< Path to CA certificate file or inline PEM string
     std::string clientCertLabel; ///< PKCS#11 label for client certificate
     std::string clientKeyLabel;  ///< PKCS#11 label for client private key
+
+    // ========================================================================
+    // Certificate/key configuration (in-memory PEM — alternative to PKCS#11)
+    // Use these when credentials are available as PEM strings at runtime,
+    // e.g. during provisioning before they are imported into PKCS#11 storage.
+    // ========================================================================
+    std::string clientCertPem; ///< In-memory client certificate PEM (mutually exclusive with clientCertLabel)
+    std::string clientKeyPem;  ///< In-memory client private key PEM (mutually exclusive with clientKeyLabel)
 
     // ========================================================================
     // TLS protocol options
@@ -64,7 +72,16 @@ struct TlsConfig
     // ========================================================================
     std::chrono::milliseconds connectionTimeout{30000}; ///< Connection timeout (default 30s)
     std::chrono::milliseconds sendTimeout{10000};       ///< Send timeout (default 10s)
-    std::chrono::milliseconds recvTimeout{10000};       ///< Receive timeout (default 10s)
+    /// Receive timeout (default 500ms).
+    ///
+    /// IMPORTANT — mutex contention: CoreMqttClient's processLoopTask holds
+    /// mutex_ for the entire duration of each MQTT_ProcessLoop call, which in
+    /// turn blocks in mbedtls_ssl_read for up to recvTimeout waiting for data.
+    /// Any concurrent publish()/subscribe() must wait for that mutex.  With
+    /// the old 10 s default this caused ~10 s stalls; keep recvTimeout short
+    /// (≤ a few hundred ms) so the background task yields the mutex quickly.
+    /// Timeout on recv returns MQTTNeedMoreBytes to coreMQTT — not an error.
+    std::chrono::milliseconds recvTimeout{500};
 
     // Legacy timeout (for backwards compatibility with milliseconds-based APIs)
     uint32_t timeoutMs{10000}; ///< TLS handshake timeout (ms) - deprecated, use connectionTimeout
@@ -100,22 +117,30 @@ struct TlsConfig
         // Certificate validation only if peer verification enabled
         if (verifyPeer)
         {
-            if (clientCertLabel.empty())
+            bool hasPkcs11Cert = !clientCertLabel.empty();
+            bool hasInMemoryCert = !clientCertPem.empty();
+
+            if (!hasPkcs11Cert && !hasInMemoryCert)
             {
-                LOPCORE_LOGE(TAG,
-                             "Validation failed: client certificate label is required when verifyPeer=true");
+                LOPCORE_LOGE(TAG, "Validation failed: client certificate required (set clientCertLabel for "
+                                  "PKCS#11 or clientCertPem for in-memory PEM)");
                 hasError = true;
             }
 
-            if (clientKeyLabel.empty())
+            if (hasPkcs11Cert && clientKeyLabel.empty())
             {
-                LOPCORE_LOGE(TAG, "Validation failed: private key label is required when verifyPeer=true");
+                LOPCORE_LOGE(TAG, "Validation failed: private key label is required when using PKCS#11");
                 hasError = true;
             }
 
-            // When using PKCS#11 (cert/key labels), CA certificate is required for server verification
-            // This prevents the cryptic "Arguments cannot be NULL" error from mbedtls-pkcs11
-            if (!clientCertLabel.empty() && caCertPath.empty())
+            if (hasInMemoryCert && clientKeyPem.empty())
+            {
+                LOPCORE_LOGE(TAG, "Validation failed: clientKeyPem is required when clientCertPem is set");
+                hasError = true;
+            }
+
+            // When using PKCS#11, CA certificate is required for server verification
+            if (hasPkcs11Cert && caCertPath.empty())
             {
                 LOPCORE_LOGE(TAG, "Validation failed: CA certificate path is required when using PKCS#11");
                 hasError = true;
@@ -208,6 +233,27 @@ public:
     TlsConfigBuilder &privateKey(const std::string &label)
     {
         config_.clientKeyLabel = label;
+        return *this;
+    }
+
+    /**
+     * @brief Set in-memory client certificate PEM (use instead of PKCS#11 label)
+     *
+     * Intended for provisioning or testing scenarios where credentials are
+     * available as PEM strings before PKCS#11 import.
+     */
+    TlsConfigBuilder &clientCertificatePem(const std::string &pem)
+    {
+        config_.clientCertPem = pem;
+        return *this;
+    }
+
+    /**
+     * @brief Set in-memory client private key PEM (use instead of PKCS#11 label)
+     */
+    TlsConfigBuilder &privateKeyPem(const std::string &pem)
+    {
+        config_.clientKeyPem = pem;
         return *this;
     }
 

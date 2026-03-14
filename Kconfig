@@ -155,14 +155,152 @@ menu "LopCore Configuration"
 
     endmenu
 
-    menu "Provisioning (Future)"
+    menu "Provisioning System"
 
         config LOPCORE_ENABLE_PROVISIONING
             bool "Enable Provisioning System"
             default n
+            depends on LOPCORE_ENABLE_TLS
+            select LOPCORE_ENABLE_STORAGE
             help
-                Enable device provisioning subsystem.
-                (Feature planned for future release)
+                Enable device provisioning subsystem for WiFi + cloud credential management.
+                Supports BLE-based WiFi provisioning and cloud fleet provisioning (AWS, future GCP/Azure).
+
+        # ── WiFi / Transport Provisioning ──
+        menu "WiFi Provisioning (Transport Layer)"
+            depends on LOPCORE_ENABLE_PROVISIONING
+            visible if LOPCORE_ENABLE_PROVISIONING
+
+            choice LOPCORE_PROV_TRANSPORT
+                prompt "Provisioning transport"
+                default LOPCORE_PROV_TRANSPORT_BLE
+
+                config LOPCORE_PROV_TRANSPORT_BLE
+                    bool "BLE (Bluetooth Low Energy)"
+                config LOPCORE_PROV_TRANSPORT_SOFTAP
+                    bool "SoftAP (WiFi Access Point)"
+            endchoice
+
+            choice LOPCORE_PROV_SECURITY
+                prompt "Default security level"
+                default LOPCORE_PROV_SECURITY_0
+
+                config LOPCORE_PROV_SECURITY_0
+                    bool "Security 0 (No encryption — development only)"
+                config LOPCORE_PROV_SECURITY_1
+                    bool "Security 1 (SRP6a key exchange — recommended for production)"
+                config LOPCORE_PROV_SECURITY_2
+                    bool "Security 2 (SRP6a + X.509 — maximum security)"
+            endchoice
+
+            config LOPCORE_PROV_BLE_CUSTOM_UUID
+                bool "Use custom BLE service UUID"
+                default n
+                help
+                    Use a custom 128-bit UUID for the BLE GATT service.
+                    If disabled, ESP-IDF default UUID is used.
+
+            config LOPCORE_PROV_AUTO_STOP_TIMEOUT
+                int "Auto-stop provisioning timeout (seconds, 0=disabled)"
+                default 300
+                range 0 3600
+                help
+                    Automatically stop provisioning if not completed within this time.
+                    Set to 0 to disable (wait indefinitely). Default 5 minutes.
+
+        endmenu
+
+        # ── Cloud Provisioning ──
+        menu "Cloud Provisioning"
+            depends on LOPCORE_ENABLE_PROVISIONING
+            visible if LOPCORE_ENABLE_PROVISIONING
+
+            config LOPCORE_PROV_AWS_FLEET
+                bool "Enable AWS IoT Fleet Provisioning"
+                default y
+                depends on LOPCORE_ENABLE_PKCS11
+                help
+                    Enable AWS IoT Fleet Provisioning by Claim.
+                    Requires corePKCS11 and coreMQTT from esp-aws-iot.
+
+            config LOPCORE_PROV_AWS_CBOR
+                bool "Use CBOR for Fleet Provisioning MQTT payloads"
+                default y
+                depends on LOPCORE_PROV_AWS_FLEET
+                help
+                    Use CBOR encoding for CreateCertificateFromCsr and RegisterThing MQTT payloads.
+                    Recommended by AWS for constrained devices. Requires tinyCBOR (espressif__cbor).
+                    If disabled, JSON encoding is used.
+
+            config LOPCORE_PROV_AWS_CSR_BUFFER_SIZE
+                int "CSR buffer size (bytes)"
+                default 2048
+                range 1024 4096
+                depends on LOPCORE_PROV_AWS_FLEET
+
+            config LOPCORE_PROV_AWS_CERT_BUFFER_SIZE
+                int "Certificate buffer size (bytes)"
+                default 2048
+                range 1024 4096
+                depends on LOPCORE_PROV_AWS_FLEET
+
+            config LOPCORE_PROV_AWS_MAX_RETRIES
+                int "Maximum provisioning retry attempts"
+                default 3
+                range 1 10
+                depends on LOPCORE_PROV_AWS_FLEET
+
+            config LOPCORE_PROV_AWS_RETRY_DELAY_SEC
+                int "Delay between retries (seconds)"
+                default 5
+                range 1 60
+                depends on LOPCORE_PROV_AWS_FLEET
+
+        endmenu
+
+        # ── Certificate Management ──
+        menu "Certificate Management"
+            depends on LOPCORE_ENABLE_PROVISIONING
+            visible if LOPCORE_ENABLE_PROVISIONING
+
+            choice LOPCORE_PROV_CERT_BACKEND
+                prompt "Certificate storage backend"
+                default LOPCORE_PROV_CERT_COREP11
+                help
+                    Select how device certificates and private keys are stored.
+
+                config LOPCORE_PROV_CERT_COREP11
+                    bool "corePKCS11 (AWS IoT SDK — recommended)"
+                    depends on LOPCORE_ENABLE_PKCS11
+                    help
+                        Use AWS corePKCS11 with NVS-backed PAL.
+                        Supports runtime key generation, CSR, and cert storage.
+
+                config LOPCORE_PROV_CERT_MBEDTLS_ONLY
+                    bool "mbedTLS only (software keys, no PKCS11)"
+                    help
+                        Use mbedTLS for key generation and CSR.
+                        Certs stored via StorageCallbacks (NVS/SPIFFS).
+                        No hardware security — suitable for development.
+            endchoice
+
+        endmenu
+
+        # ── BLE Data Transfer ──
+        menu "BLE Data Transfer"
+            depends on LOPCORE_ENABLE_PROVISIONING && LOPCORE_PROV_TRANSPORT_BLE
+            visible if LOPCORE_ENABLE_PROVISIONING
+
+            config LOPCORE_PROV_BLE_MAX_PAYLOAD
+                int "Maximum BLE payload size (bytes)"
+                default 8192
+                range 1024 32768
+                help
+                    Maximum total payload size for custom BLE endpoints.
+                    Must accommodate claim certificate + private key + CA cert + metadata.
+                    Uses 4-byte length-prefixed framing for reliable reassembly.
+
+        endmenu
 
     endmenu
 

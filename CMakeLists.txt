@@ -214,6 +214,8 @@ if(ESP_AWS_IOT_AVAILABLE)
             "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/coreMQTT/source/core_mqtt_state.c"
             "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/coreMQTT/source/core_mqtt_serializer.c"
             "${ESP_AWS_IOT_PATH}/libraries/backoffAlgorithm/backoffAlgorithm/source/backoff_algorithm.c"
+            "${ESP_AWS_IOT_PATH}/libraries/common/posix_compat/clock_esp.c"
+            "${ESP_AWS_IOT_PATH}/libraries/common/posix_compat/semaphore.c"
         )
 
         # Add esp-aws-iot include directories for coreMQTT and corePKCS11

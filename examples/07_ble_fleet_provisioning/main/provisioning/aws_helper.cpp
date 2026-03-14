@@ -78,14 +78,17 @@ bool AwsProvisioningHelper::provision()
 
     auto awsStorage = nvsStorage(ctx_.awsNvs);
 
+    // If endpoint came from default fallback (not NVS), persist it so provisioner can read it
+    if (ctx_.prov_data.aws_endpoint.has_value())
+        ctx_.awsNvs->write("aws_endpoint", ctx_.prov_data.aws_endpoint.value());
+
     AwsProvisioningConfig awsCfg;
-    awsCfg.setEndpoint(ctx_.prov_data.aws_endpoint.value())
-        .setTemplateName(ctx_.prov_data.provisioning_template.value())
-        .setRootCa(ctx_.prov_data.root_ca.value())
-        .setCsrSubjectName(ctx_.csr_subject_name.c_str())
-        .setCertificateManager(certManager_)
+    // AWS-specific setters first (return AwsProvisioningConfig&)
+    awsCfg.setCsrSubjectName(ctx_.csr_subject_name.c_str())
+        .setDeviceIdProvider([&ctx = ctx_]() { return ctx.deviceId; });
+    // Base class setters (return CloudProvisioningConfig&)
+    awsCfg.setCertificateManager(certManager_)
         .setRetries(3, 5)
-        .setDeviceIdProvider([&ctx = ctx_]() { return ctx.deviceId; })
         .addConfigStorage("thing_name",             awsStorage)
         .addConfigStorage("claim_cert",             awsStorage)
         .addConfigStorage("claim_key",              awsStorage)

@@ -31,7 +31,7 @@ void FactoryResetState::onEnter()
     // Erase provisioning namespace
     if (ctx_.awsNvs->initialize())
     {
-        ctx_.awsNvs->clear();
+        ctx_.awsNvs->eraseNamespace();
         LOPCORE_LOGI(TAG, "  Erased AWS provisioning config");
     }
 

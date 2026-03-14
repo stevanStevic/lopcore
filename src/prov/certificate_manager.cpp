@@ -17,6 +17,8 @@
 #include <mbedtls/oid.h>
 #include <mbedtls/pk.h>
 #include <mbedtls/x509_csr.h>
+#include <mbedtls/base64.h>
+#include <mbedtls/pem.h>
 
 #if CONFIG_LOPCORE_PROV_CERT_COREP11
 // corePKCS11
@@ -430,6 +432,50 @@ bool CertificateManager::deleteDeviceCredentials()
 // ================================================================
 // PEM → DER helper
 // ================================================================
+
+// Local implementation using mbedTLS base64 decode.
+// Strips the -----BEGIN ...-----/-----END ...------ header+footer and
+// base64-decodes the body into DER format.
+static int convert_pem_to_der(const unsigned char *input, size_t ilen,
+                               unsigned char *output, size_t *olen)
+{
+    const unsigned char *s1 = nullptr;
+    const unsigned char *s2 = nullptr;
+    const unsigned char *end = input + ilen;
+
+    // Find begin marker (first "-----\n" after "-----BEGIN")
+    s1 = reinterpret_cast<const unsigned char *>(
+        strstr(reinterpret_cast<const char *>(input), "-----BEGIN "));
+    if (s1 == nullptr)
+        return -1;
+    s1 = reinterpret_cast<const unsigned char *>(strchr(reinterpret_cast<const char *>(s1), '\n'));
+    if (s1 == nullptr)
+        return -1;
+    s1++;
+
+    // Find end marker
+    s2 = reinterpret_cast<const unsigned char *>(
+        strstr(reinterpret_cast<const char *>(s1), "-----END "));
+    if (s2 == nullptr)
+        return -1;
+
+    // Strip newlines from base64 body
+    size_t len = static_cast<size_t>(s2 - s1);
+    std::vector<unsigned char> b64buf;
+    b64buf.reserve(len);
+    for (size_t i = 0; i < len; i++)
+    {
+        if (s1[i] != '\r' && s1[i] != '\n')
+            b64buf.push_back(s1[i]);
+    }
+
+    size_t outUsed = 0;
+    int ret = mbedtls_base64_decode(output, *olen, &outUsed,
+                                    b64buf.data(), b64buf.size());
+    if (ret == 0)
+        *olen = outUsed;
+    return ret;
+}
 
 int CertificateManager::pemToDer(const std::string &pem, std::vector<uint8_t> &der) const
 {

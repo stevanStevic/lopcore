@@ -143,7 +143,9 @@ bool SdCardStorage::initialize()
             LOPCORE_LOGW(TAG, "Internal pullups enabled (insufficient, use 10k external pullups)");
         }
 
-        // Configure custom pins if specified
+        // Configure custom pins if specified.
+        // Note: GPIO matrix pin remapping is only available on targets that support it.
+#ifdef SOC_SDMMC_USE_GPIO_MATRIX
         if (config_.sdmmcClk >= 0)
         {
             slot_config.clk = (gpio_num_t) config_.sdmmcClk;
@@ -168,6 +170,7 @@ bool SdCardStorage::initialize()
         {
             slot_config.d3 = (gpio_num_t) config_.sdmmcD3;
         }
+#endif // SOC_SDMMC_USE_GPIO_MATRIX
 
         esp_err_t ret = esp_vfs_fat_sdmmc_mount(config_.mountPoint.c_str(), &host, &slot_config,
                                                 &mount_config, &card_);

@@ -11,5 +11,5 @@ idf_component_register(
         "provisioning/ble_helper.cpp"
         "provisioning/aws_helper.cpp"
     INCLUDE_DIRS "."
-    REQUIRES lopcore nvs_flash bt esp_wifi mqtt driver
+    REQUIRES lopcore nvs_flash bt esp_wifi mqtt driver coreMQTT
 )

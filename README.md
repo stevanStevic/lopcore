@@ -20,30 +20,31 @@ LopCore sits between your application and ESP-IDF, providing:
 - **Dual MQTT Clients** - ESP-MQTT and CoreMQTT with auto-selection
 - **Type-Safe State Machine** - Hierarchical FSM with transition validation
 - **Secure TLS** - mbedTLS with PKCS#11 hardware crypto support
+- **BLE Fleet Provisioning** - WiFi + AWS IoT Fleet Provisioning out of the box
 - **Type Safety** - Modern C++17 with RAII, smart pointers, `std::optional`
 - **Production Ready** - 97% test coverage, comprehensive error handling
 
-```
-┌──────────────────────────────────┐
-│   Your Application Logic         │
-├──────────────────────────────────┤
-│   LopCore Middleware  ← This     │
-├──────────────────────────────────┤
-│   ESP-IDF Hardware APIs          │
-└──────────────────────────────────┘
+```mermaid
+block-beta
+    columns 1
+    A["Your Application Logic"]
+    B["LopCore Middleware  ← This"]
+    C["ESP-IDF Hardware APIs"]
+    A --> B --> C
 ```
 
 ---
 
 ## ✨ Features at a Glance
 
-| Component         | Features                               | Status    |
-| ----------------- | -------------------------------------- | --------- |
-| **Logging**       | Multi-sink, colors, rotation, 5 levels | 🟢 Stable |
-| **Storage**       | NVS + SPIFFS unified API, RAII handles | 🟢 Stable |
-| **MQTT**          | Dual client, auto-reconnect, QoS 0-2   | 🟢 Stable |
-| **TLS**           | mbedTLS, PKCS#11, hardware crypto      | 🟢 Stable |
-| **State Machine** | Type-safe, hierarchical, observable    | 🟢 Stable |
+| Component         | Features                                          | Status    |
+| ----------------- | ------------------------------------------------- | --------- |
+| **Logging**       | Multi-sink, colors, rotation, 5 levels            | 🟢 Stable |
+| **Storage**       | NVS + SPIFFS unified API, RAII handles            | 🟢 Stable |
+| **MQTT**          | Dual client, auto-reconnect, QoS 0-2              | 🟢 Stable |
+| **TLS**           | mbedTLS, PKCS#11, hardware crypto                 | 🟢 Stable |
+| **State Machine** | Type-safe, hierarchical, observable               | 🟢 Stable |
+| **Provisioning**  | BLE WiFi + AWS Fleet Provisioning, CertManager    | 🟢 Stable |
 
 ---
 
@@ -333,6 +334,29 @@ while (true) {
 - Observer pattern for state change notifications
 - State history tracking
 - Clean separation of state logic
+
+### 🔷 Provisioning
+
+End-to-end device provisioning: BLE WiFi credentials delivery → AWS Fleet Provisioning.
+
+**Quick Example:**
+
+```cpp
+#include "lopcore/prov/ble_provisioning_helper.hpp"
+#include "lopcore/prov/aws_provisioning_helper.hpp"
+
+// See examples/07_ble_fleet_provisioning for a full working application
+// that wires these helpers into a StateMachine<ApplicationState>.
+```
+
+**Features:**
+
+- BLE transport via `wifi_prov_mgr` with custom `AwsDataEndpointHandler` endpoint
+- Delivers claim certificate, private key, AWS endpoint, and Fleet Provisioning template name over BLE
+- `CertificateManager` generates device key-pair and CSR, stores permanent cert via mbedTLS or PKCS#11
+- `AwsFleetProvisioner<T>` runs the CBOR-based Fleet Provisioning MQTT workflow
+- AWS credentials sent over BLE **before** WiFi credentials (BLE transport is torn down on WiFi connect)
+- Claim credentials auto-deleted from NVS after successful provisioning
 
 ---
 

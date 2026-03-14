@@ -27,30 +27,23 @@ mobile app), then self-registers with AWS IoT Core using Fleet Provisioning.
 
 ### State Machine
 
-```
-                    ┌──────────────────────────────────────────────────────┐
-                    │                                                        │
-                    ▼                                                        │
-  ┌──────┐  no   ┌──────────────────┐  success  ┌─────────┐               │
-  │ INIT │──────►│  CONFIGURATION   │──────────►│ NOMINAL │               │
-  └──────┘  prov  └──────────────────┘           └─────────┘               │
-     │             │                               │     │                  │
-     │  provisioned│ max retries                   │wifi │                  │
-     └─────────────┘ exceeded                      │lost │   BOOT button   │
-                    │                               ▼     │   (GPIO_NUM_0)  │
-                    │            ┌──────────────────────┐  │                │
-                    │            │       DEGRADED        │  │                │
-                    │            └──────────────────────┘  │                │
-                    │              │ timeout  │ reconnect   │                │
-                    │              ▼          └────────────►│NOMINAL         │
-                    │            INIT                       │                │
-                    │                                       │                │
-                    └───────────────────────────────────────►               │
-                                                            ▼                │
-                                                   ┌──────────────────┐     │
-                                                   │  FACTORY_RESET   │─────┘
-                                                   └──────────────────┘
-                                                   (erases NVS, restarts)
+```mermaid
+stateDiagram-v2
+    [*] --> INIT
+
+    INIT --> CONFIGURATION : not provisioned\n(no thing_name in NVS)
+    INIT --> NOMINAL : already provisioned
+
+    CONFIGURATION --> NOMINAL : Fleet Provisioning succeeded
+    CONFIGURATION --> FACTORY_RESET : max retries exceeded
+
+    NOMINAL --> DEGRADED : WiFi lost
+    NOMINAL --> FACTORY_RESET : BOOT button (GPIO_NUM_0)
+
+    DEGRADED --> NOMINAL : WiFi reconnected
+    DEGRADED --> INIT : reconnect timeout (30 s)
+
+    FACTORY_RESET --> [*] : erases NVS · restarts
 ```
 
 ### Transition Rules
@@ -71,12 +64,16 @@ mobile app), then self-registers with AWS IoT Core using Fleet Provisioning.
 The provisioning flow is a manual phase switch inside `ConfigurationState` (not a nested
 `StateMachine`) — the provisioning phases are an implementation detail, not the FSM showcase:
 
-```
-BLE_PROVISIONING  ──(complete)──►  AWAITING_WIFI (2s)  ──►  AWS_PROVISIONING  ──(success)──►
-SUCCESS_CLEANUP  ──►  sm->transition(NOMINAL)
+```mermaid
+flowchart LR
+    A([BLE_PROVISIONING]) -->|complete| B([AWAITING_WIFI\n2 s stabilise])
+    B --> C([AWS_PROVISIONING])
+    C -->|success| D([SUCCESS_CLEANUP])
+    D --> E([sm → NOMINAL])
 
-BLE_PROVISIONING  ──(timeout/fail)──►  FAILED_RETRY_WAIT  ──(retry)──►  BLE_PROVISIONING
-                                                            ──(max retries)──►  FACTORY_RESET
+    A -->|timeout / fail| F([FAILED_RETRY_WAIT])
+    F -->|retry| A
+    F -->|max retries| G([sm → FACTORY_RESET])
 ```
 
 ### State Observer

@@ -20,7 +20,9 @@
 #include "driver/gpio.h"
 #include "esp_event.h"
 #include "esp_mac.h"
+#include "esp_netif.h"
 #include "esp_system.h"
+#include "esp_wifi.h"
 #include "nvs_flash.h"
 
 #include "lopcore/logging/console_sink.hpp"
@@ -116,11 +118,58 @@ static std::string getDeviceId()
 }
 
 // ============================================================================
-// app_main
+// Application task — runs state machine on a large stack
+// ============================================================================
+
+struct AppTaskParams {
+    std::shared_ptr<lopcore::NvsStorage> awsNvs;
+    std::string deviceId;
+};
+
+static void app_task(void *pvParam)
+{
+    auto *p = static_cast<AppTaskParams *>(pvParam);
+
+    // Initialize lopcore logger with console sink
+    auto &logger = lopcore::Logger::getInstance();
+    logger.addSink(std::make_unique<lopcore::ConsoleSink>());
+    logger.setGlobalLevel(lopcore::LogLevel::INFO);
+
+    // Application context
+    ProvisioningContext ctx;
+    ctx.awsNvs               = p->awsNvs;
+    ctx.deviceId             = p->deviceId;
+    ctx.ble_service_name     = BLE_SERVICE_NAME;
+    ctx.csr_subject_name     = CSR_SUBJECT_NAME;
+    ctx.default_aws_endpoint = DEFAULT_AWS_ENDPOINT;
+    delete p;
+
+    // Create state machine
+    auto sm = createApplicationStateMachine(ctx);
+
+    // Setup factory reset button (GPIO interrupt)
+    setup_factory_reset_button(sm.get());
+
+    LOPCORE_LOGI(TAG, "===========================================");
+    LOPCORE_LOGI(TAG, "LopCore BLE Fleet Provisioning Example");
+    LOPCORE_LOGI(TAG, "===========================================");
+    LOPCORE_LOGI(TAG, "Device ID: %s", ctx.deviceId.c_str());
+    LOPCORE_LOGI(TAG, "State machine ready. Starting in INIT...");
+    LOPCORE_LOGI(TAG, "");
+
+    while (true)
+    {
+        sm->update();
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
+
+// ============================================================================
+// app_main — minimal; heavy init delegated to app_task (32 KB stack)
 // ============================================================================
 extern "C" void app_main(void)
 {
-    // Initialize NVS flash
+    // NVS flash
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
     {
@@ -129,52 +178,26 @@ extern "C" void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    // Default event loop (required by WiFi, BLE, ESP-MQTT)
+    // Event loop + TCP/IP + WiFi (required by wifi_prov_mgr before start)
     ESP_ERROR_CHECK(esp_event_loop_create_default());
+    ESP_ERROR_CHECK(esp_netif_init());
+    esp_netif_create_default_wifi_sta();
+    wifi_init_config_t wifi_cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&wifi_cfg));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_start());
 
-    // Initialize lopcore logger with console sink
-    auto &logger = lopcore::Logger::getInstance();
-    logger.addSink(std::make_unique<lopcore::ConsoleSink>());
-    logger.setGlobalLevel(lopcore::LogLevel::INFO);
-
-    // NVS storage for AWS provisioning data
+    // NVS storage (created here so it doesn't live on app_task stack)
     auto awsNvsConfig = lopcore::storage::NvsConfig()
                             .setNamespace(NVS_NS_AWS)
                             .setReadOnly(false);
     auto awsNvs = std::make_shared<lopcore::NvsStorage>(awsNvsConfig);
     if (!awsNvs->initialize())
     {
-        LOPCORE_LOGE(TAG, "Failed to initialize NVS namespace '%s'", NVS_NS_AWS);
+        ESP_LOGE(TAG, "Failed to initialize NVS namespace '%s'", NVS_NS_AWS);
         return;
     }
 
-    // Application context
-    ProvisioningContext ctx;
-    ctx.awsNvs              = awsNvs;
-    ctx.deviceId            = getDeviceId();
-    ctx.ble_service_name    = BLE_SERVICE_NAME;
-    ctx.csr_subject_name    = CSR_SUBJECT_NAME;
-    ctx.default_aws_endpoint = DEFAULT_AWS_ENDPOINT;
-
-    // Create state machine
-    auto sm = createApplicationStateMachine(ctx);
-
-    // Setup factory reset button (GPIO interrupt)
-    setup_factory_reset_button(sm.get());
-
-    // Banner — logged here because StateMachine constructor does not call
-    // onEnter() for the initial state; first update() drives InitState::update()
-    LOPCORE_LOGI(TAG, "===========================================");
-    LOPCORE_LOGI(TAG, "LopCore BLE Fleet Provisioning Example");
-    LOPCORE_LOGI(TAG, "===========================================");
-    LOPCORE_LOGI(TAG, "Device ID: %s", ctx.deviceId.c_str());
-    LOPCORE_LOGI(TAG, "State machine ready. Starting in INIT...");
-    LOPCORE_LOGI(TAG, "");
-
-    // Main loop — StateMachine has no isRunning(); loop forever
-    while (true)
-    {
-        sm->update();
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
+    auto *p      = new AppTaskParams{awsNvs, getDeviceId()};
+    xTaskCreate(app_task, "app_task", 32768, p, 5, nullptr);
 }

@@ -31,6 +31,11 @@ void ConfigurationState::onEnter()
 
     // Start Phase 1
     startPhase(Phase::BLE_PROVISIONING);
+    if (!bleHelper_->start())
+    {
+        handlePhaseFailure("Failed to start BLE provisioning");
+        return;
+    }
 }
 
 void ConfigurationState::update()
@@ -115,7 +120,13 @@ void ConfigurationState::update()
                     LOPCORE_LOGI(TAG, "  Retrying provisioning (attempt %d of %d)",
                                  ctx_.config.retryCount + 1, ctx_.config.maxRetries);
                     logPhaseTransition(Phase::FAILED_RETRY_WAIT, Phase::BLE_PROVISIONING);
+                    bleHelper_->stop();
                     startPhase(Phase::BLE_PROVISIONING);
+                    if (!bleHelper_->start())
+                    {
+                        handlePhaseFailure("Failed to restart BLE provisioning");
+                        return;
+                    }
                 }
                 else
                 {

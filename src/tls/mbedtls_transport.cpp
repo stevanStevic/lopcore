@@ -349,22 +349,9 @@ esp_err_t MbedtlsTransport::connectWithRetries(const TlsConfig &config)
     // Setup credentials
     MbedtlsPkcs11Credentials_t credentials = {0};
     credentials.pRootCaPath = config.caCertPath.empty() ? nullptr : config.caCertPath.c_str();
+    credentials.pClientCertLabel = const_cast<char *>(config.clientCertLabel.c_str());
+    credentials.pPrivateKeyLabel = const_cast<char *>(config.clientKeyLabel.c_str());
     credentials.p11Session = pkcs11Session_.get();
-    // Use in-memory PEM when provided; otherwise fall back to PKCS#11 labels.
-    if (!config.clientCertPem.empty() && !config.clientKeyPem.empty())
-    {
-        credentials.pClientCertPem = config.clientCertPem.c_str();
-        credentials.pPrivateKeyPem = config.clientKeyPem.c_str();
-        credentials.pClientCertLabel = nullptr;
-        credentials.pPrivateKeyLabel = nullptr;
-    }
-    else
-    {
-        credentials.pClientCertLabel = const_cast<char *>(config.clientCertLabel.c_str());
-        credentials.pPrivateKeyLabel = const_cast<char *>(config.clientKeyLabel.c_str());
-        credentials.pClientCertPem = nullptr;
-        credentials.pPrivateKeyPem = nullptr;
-    }
     credentials.disableSni = !config.enableSni;
 
     // Setup ALPN if needed (port 443)

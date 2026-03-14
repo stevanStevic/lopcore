@@ -4,20 +4,19 @@ This directory contains example applications demonstrating LopCore middleware fe
 
 ## Available Examples
 
-| Example                                                 | Description                                         | Components Used                                           |
-| ------------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------- |
-| [01_basic_logging](01_basic_logging/)                   | Console logging with different log levels           | Logger, ConsoleSink                                       |
-| [02_storage_basics](02_storage_basics/)                 | NVS and SPIFFS storage operations                   | StorageFactory, NVS, SPIFFS                               |
-| [03_state_machine](03_state_machine/)                   | Type-safe hierarchical state machine                | StateMachine, IState                                      |
-| [04_mqtt_esp_client](04_mqtt_esp_client/)               | ESP-MQTT client with subscriptions and publishing   | EspMqttClient                                             |
-| [05_mqtt_coremqtt_async](05_mqtt_coremqtt_async/)       | CoreMQTT async mode with AWS IoT Device Shadow      | CoreMqttClient, TLS, PKCS#11                              |
-| [06_mqtt_coremqtt_sync](06_mqtt_coremqtt_sync/)         | CoreMQTT manual mode for Fleet Provisioning pattern | CoreMqttClient, TLS, PKCS#11                              |
-| [07_ble_fleet_provisioning](07_ble_fleet_provisioning/) | BLE WiFi + AWS IoT Fleet Provisioning end-to-end    | WiFiProvisioning, CertificateManager, AwsFleetProvisioner |
+| Example                                           | Description                                         | Components Used              |
+| ------------------------------------------------- | --------------------------------------------------- | ---------------------------- |
+| [01_basic_logging](01_basic_logging/)             | Console logging with different log levels           | Logger, ConsoleSink          |
+| [02_storage_basics](02_storage_basics/)           | NVS and SPIFFS storage operations                   | StorageFactory, NVS, SPIFFS  |
+| [03_state_machine](03_state_machine/)             | Type-safe hierarchical state machine                | StateMachine, IState         |
+| [04_mqtt_esp_client](04_mqtt_esp_client/)         | ESP-MQTT client with subscriptions and publishing   | EspMqttClient                |
+| [05_mqtt_coremqtt_async](05_mqtt_coremqtt_async/) | CoreMQTT async mode with AWS IoT Device Shadow      | CoreMqttClient, TLS, PKCS#11 |
+| [06_mqtt_coremqtt_sync](06_mqtt_coremqtt_sync/)   | CoreMQTT manual mode for Fleet Provisioning pattern | CoreMqttClient, TLS, PKCS#11 |
 
 ### Coming Soon
 
-- Full application combining multiple components
-- Advanced state machine patterns
+-   Full application combining multiple components
+-   Advanced state machine patterns
 
 ## How to Use Examples
 
@@ -46,18 +45,18 @@ idf_component_register(
 
 All examples require:
 
-- ESP-IDF v5.2.0 or later
-- LopCore component in your `components/` directory
-- ESP32/ESP32-S2/ESP32-S3/ESP32-C3 development board
+-   ESP-IDF v5.2.0 or later
+-   LopCore component in your `components/` directory
+-   ESP32/ESP32-S2/ESP32-S3/ESP32-C3 development board
 
 ## Example Structure
 
 Each example is a complete ESP-IDF project with:
 
-- `main/main.cpp` - Example application code
-- `main/CMakeLists.txt` - Component registration
-- `CMakeLists.txt` - Project configuration
-- `README.md` - Detailed documentation and explanation
+-   `main/main.cpp` - Example application code
+-   `main/CMakeLists.txt` - Component registration
+-   `CMakeLists.txt` - Project configuration
+-   `README.md` - Detailed documentation and explanation
 
 ## Learning Path
 
@@ -76,9 +75,9 @@ Not sure which MQTT example to use? See [MQTT Client Selection Guide](../docs/MQ
 
 **Quick decision:**
 
-- **Standard MQTT broker** (Mosquitto, HiveMQ, etc.) → Use example 04 (ESP-MQTT)
-- **AWS IoT Core** with Device Shadow/Jobs → Use example 05 (CoreMQTT async)
-- **AWS IoT Fleet Provisioning** → Use example 06 (CoreMQTT sync)
+-   **Standard MQTT broker** (Mosquitto, HiveMQ, etc.) → Use example 04 (ESP-MQTT)
+-   **AWS IoT Core** with Device Shadow/Jobs → Use example 05 (CoreMQTT async)
+-   **AWS IoT Fleet Provisioning** → Use example 06 (CoreMQTT sync)
 
 ## Common Patterns
 
@@ -159,9 +158,9 @@ sudo usermod -a -G dialout $USER  # Linux
 
 ## Getting Help
 
-- Check individual example README files for detailed documentation
-- Review the main [LopCore README](../README.md)
-- See [Architecture Documentation](../../docs/middleware_architecture.md)
+-   Check individual example README files for detailed documentation
+-   Review the main [LopCore README](../README.md)
+-   See [Architecture Documentation](../../docs/middleware_architecture.md)
 
 ## Contributing Examples
 

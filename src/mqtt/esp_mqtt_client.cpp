@@ -76,19 +76,16 @@ EspMqttClient::EspMqttClient(const MqttConfig &config)
             mqttConfig.broker.verification.certificate = tls.caCertPath.c_str();
         }
 
-        if (!tls.clientCertPem.empty())
+        if (!tls.clientCertLabel.empty())
         {
-            // In-memory PEM credentials (e.g. during provisioning before PKCS#11 import)
-            mqttConfig.credentials.authentication.certificate = tls.clientCertPem.c_str();
-            mqttConfig.credentials.authentication.certificate_len = tls.clientCertPem.size() + 1;
-            mqttConfig.credentials.authentication.key = tls.clientKeyPem.c_str();
-            mqttConfig.credentials.authentication.key_len = tls.clientKeyPem.size() + 1;
-        }
-        else if (!tls.clientCertLabel.empty())
-        {
-            // PKCS#11 client certificate and private key
+            // PKCS#11 client certificate
             mqttConfig.credentials.authentication.certificate = tls.clientCertLabel.c_str();
             mqttConfig.credentials.authentication.use_secure_element = true;
+        }
+
+        if (!tls.clientKeyLabel.empty())
+        {
+            // PKCS#11 private key
             mqttConfig.credentials.authentication.key = tls.clientKeyLabel.c_str();
         }
 

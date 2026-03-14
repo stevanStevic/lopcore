@@ -129,15 +129,10 @@ typedef struct MbedtlsPkcs11Credentials
      */
     bool disableSni;
 
-    const char *pRootCaPath; /**< @brief Trusted server root CA — inline PEM string (not a file path). */
-    char *pClientCertLabel;  /**< @brief PKCS #11 label for the client certificate (NULL when using PEM). */
-    char *pPrivateKeyLabel;  /**< @brief PKCS #11 label for the private key (NULL when using PEM). */
+    const char *pRootCaPath; /**< @brief String representing a trusted server root certificate. */
+    char *pClientCertLabel;  /**< @brief String representing the PKCS #11 label for the client certificate. */
+    char *pPrivateKeyLabel;  /**< @brief String representing the PKCS #11 label for the private key. */
     CK_SESSION_HANDLE p11Session; /**< @brief PKCS #11 session handle. */
-    /** @brief In-memory client certificate PEM (alternative to pClientCertLabel/pPrivateKeyLabel).
-     *  When both pClientCertPem and pPrivateKeyPem are non-NULL, the PKCS #11 label path is
-     *  skipped and credentials are loaded directly from PEM strings. */
-    const char *pClientCertPem;
-    const char *pPrivateKeyPem;
 } MbedtlsPkcs11Credentials_t;
 
 /**

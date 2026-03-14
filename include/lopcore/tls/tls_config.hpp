@@ -72,7 +72,16 @@ struct TlsConfig
     // ========================================================================
     std::chrono::milliseconds connectionTimeout{30000}; ///< Connection timeout (default 30s)
     std::chrono::milliseconds sendTimeout{10000};       ///< Send timeout (default 10s)
-    std::chrono::milliseconds recvTimeout{10000};       ///< Receive timeout (default 10s)
+    /// Receive timeout (default 500ms).
+    ///
+    /// IMPORTANT — mutex contention: CoreMqttClient's processLoopTask holds
+    /// mutex_ for the entire duration of each MQTT_ProcessLoop call, which in
+    /// turn blocks in mbedtls_ssl_read for up to recvTimeout waiting for data.
+    /// Any concurrent publish()/subscribe() must wait for that mutex.  With
+    /// the old 10 s default this caused ~10 s stalls; keep recvTimeout short
+    /// (≤ a few hundred ms) so the background task yields the mutex quickly.
+    /// Timeout on recv returns MQTTNeedMoreBytes to coreMQTT — not an error.
+    std::chrono::milliseconds recvTimeout{500};
 
     // Legacy timeout (for backwards compatibility with milliseconds-based APIs)
     uint32_t timeoutMs{10000}; ///< TLS handshake timeout (ms) - deprecated, use connectionTimeout

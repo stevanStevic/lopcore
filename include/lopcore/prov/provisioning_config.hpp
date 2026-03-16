@@ -18,6 +18,12 @@
 #ifndef pkcs11configLABEL_CLAIM_PRIVATE_KEY
 #define pkcs11configLABEL_CLAIM_PRIVATE_KEY "Claim Key"
 #endif
+#ifndef pkcs11configLABEL_DEVICE_CERTIFICATE_FOR_TLS
+#define pkcs11configLABEL_DEVICE_CERTIFICATE_FOR_TLS "Device Cert"
+#endif
+#ifndef pkcs11configLABEL_DEVICE_PRIVATE_KEY_FOR_TLS
+#define pkcs11configLABEL_DEVICE_PRIVATE_KEY_FOR_TLS "Device Priv TLS Key"
+#endif
 
 namespace lopcore {
 namespace prov {
@@ -197,8 +203,8 @@ public:
         , rootCaKey_("root_ca")
         , claimCertKey_("claim_cert")
         , claimKeyKey_("claim_key")
-        , deviceCertLabel_("device_cert")
-        , deviceKeyLabel_("device_key")
+        , deviceCertLabel_(pkcs11configLABEL_DEVICE_CERTIFICATE_FOR_TLS)
+        , deviceKeyLabel_(pkcs11configLABEL_DEVICE_PRIVATE_KEY_FOR_TLS)
         , claimCertLabel_(pkcs11configLABEL_CLAIM_CERTIFICATE)
         , claimKeyLabel_(pkcs11configLABEL_CLAIM_PRIVATE_KEY)
         , csrSubjectName_("CN=LopCore Device")

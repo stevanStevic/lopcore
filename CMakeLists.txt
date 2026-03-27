@@ -153,7 +153,7 @@ if(NOT CONFIG_LOPCORE_ENABLE_PROVISIONING)
     )
 else()
     message(STATUS "LopCore: Provisioning ENABLED")
-    
+
     # Check for CBOR component (for Fleet Provisioning serialization)
     if(CONFIG_LOPCORE_PROV_AWS_CBOR)
         if("espressif__cbor" IN_LIST build_components OR "cbor" IN_LIST build_components)
@@ -218,11 +218,17 @@ if(ESP_AWS_IOT_AVAILABLE)
             "${ESP_AWS_IOT_PATH}/libraries/common/posix_compat/semaphore.c"
         )
 
-        # Add esp-aws-iot include directories for coreMQTT and corePKCS11
-        target_include_directories(${COMPONENT_LIB} PRIVATE
+        # Public coreMQTT include directories - consumers of lopcore's public headers
+        # (e.g. coremqtt_client.hpp) need core_mqtt.h, transport_interface.h, and the
+        # lopcore-supplied core_mqtt_config.h that core_mqtt.h pulls in transitively.
+        target_include_directories(${COMPONENT_LIB} PUBLIC
             "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/coreMQTT/source/include"
             "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/coreMQTT/source/interface"
             "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/config"
+        )
+
+        # Private implementation-only include directories - not exposed to consumers.
+        target_include_directories(${COMPONENT_LIB} PRIVATE
             "${ESP_AWS_IOT_PATH}/libraries/corePKCS11/corePKCS11/source/include"
             "${ESP_AWS_IOT_PATH}/libraries/corePKCS11/corePKCS11/source/dependency/3rdparty/pkcs11/published/2-40-errata-1"
             "${ESP_AWS_IOT_PATH}/libraries/corePKCS11/corePKCS11/source/dependency/3rdparty/mbedtls_utils"

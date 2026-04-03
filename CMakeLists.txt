@@ -227,12 +227,18 @@ if(ESP_AWS_IOT_AVAILABLE)
             "${ESP_AWS_IOT_PATH}/libraries/coreMQTT/config"
         )
 
-        # Private implementation-only include directories - not exposed to consumers.
-        target_include_directories(${COMPONENT_LIB} PRIVATE
+        # Public corePKCS11 include directories - consumers of lopcore public headers
+        # (e.g. mbedtls_transport.hpp) transitively include core_pkcs11.h and the
+        # PKCS#11 type definitions, so these must be PUBLIC.
+        target_include_directories(${COMPONENT_LIB} PUBLIC
             "${ESP_AWS_IOT_PATH}/libraries/corePKCS11/corePKCS11/source/include"
             "${ESP_AWS_IOT_PATH}/libraries/corePKCS11/corePKCS11/source/dependency/3rdparty/pkcs11/published/2-40-errata-1"
-            "${ESP_AWS_IOT_PATH}/libraries/corePKCS11/corePKCS11/source/dependency/3rdparty/mbedtls_utils"
             "${ESP_AWS_IOT_PATH}/libraries/corePKCS11/config"
+        )
+
+        # Private implementation-only include directories - not needed by consumers.
+        target_include_directories(${COMPONENT_LIB} PRIVATE
+            "${ESP_AWS_IOT_PATH}/libraries/corePKCS11/corePKCS11/source/dependency/3rdparty/mbedtls_utils"
             "${ESP_AWS_IOT_PATH}/libraries/common/posix_compat"
             "${ESP_AWS_IOT_PATH}/libraries/backoffAlgorithm/backoffAlgorithm/source/include"
         )

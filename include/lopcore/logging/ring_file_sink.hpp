@@ -11,6 +11,9 @@
  * field operator reads the last N KB of logs after a fault. Not appropriate
  * for general-purpose log files where chronological completeness is needed.
  *
+ * Internally backed by lopcore::detail::RingFileStorage; for typed binary
+ * records use `lopcore::RingRecordFile<T>` instead.
+ *
  * @copyright Copyright (c) 2026 LopCore Contributors
  * @license MIT License
  */
@@ -22,6 +25,8 @@
 #include <mutex>
 #include <string>
 
+#include "lopcore/storage/detail/ring_file_storage.hpp"
+
 #include "log_sink.hpp"
 
 namespace lopcore
@@ -29,16 +34,6 @@ namespace lopcore
 
 /**
  * @brief Configuration for RingFileSink
- *
- * @code
- * RingFileSinkConfig config;
- * config.setBasePath("/diag")
- *       .setFilename("console.log")
- *       .setMaxBodyBytes(256 * 1024);
- *
- * auto sink = std::make_unique<RingFileSink>(config);
- * logger.addSink(std::move(sink));
- * @endcode
  */
 struct RingFileSinkConfig
 {
@@ -68,35 +63,16 @@ struct RingFileSinkConfig
 /**
  * @brief Log sink that writes to a fixed-size circular file
  *
- * File layout:
- *   bytes [0, HEADER_SIZE):           u64 writePos (monotonically increasing)
- *   bytes [HEADER_SIZE, HEADER_SIZE+max_body_bytes): circular body
- *
- * On each write, formatted bytes are placed at offset
- * `HEADER_SIZE + (writePos % max_body_bytes)`, wrapping back to the start
- * of the body when needed. After every write the new writePos is persisted
- * to bytes [0, 8) so the position survives reboots.
- *
- * Thread safety: the public methods serialize on an internal mutex so this
- * sink is safe to share with concurrent `write()` and `readAll()` callers.
- *
- * @note The file size is fixed at construction time. Changing `max_body_bytes`
- *       between runs while pointing at the same file leads to undefined data
- *       (the wrap arithmetic changes meaning). Use a different filename or
- *       erase the file when changing size.
+ * Each `write()` formats the LogMessage into a text line and appends it
+ * to the body, wrapping at the boundary if needed. Lines may split across
+ * the wrap boundary - the byte stream stays usable because parsers can
+ * resync on the next `\n`.
  */
 class RingFileSink : public ILogSink
 {
 public:
-    /**
-     * @brief Construct a ring file sink
-     * @param config Configuration; base_path/filename combined to form the path
-     */
     explicit RingFileSink(const RingFileSinkConfig &config = RingFileSinkConfig());
 
-    /**
-     * @brief Destructor
-     */
     ~RingFileSink() override = default;
 
     RingFileSink(const RingFileSink &) = delete;
@@ -109,22 +85,17 @@ public:
     const char *getName() const override;
 
     /**
-     * @brief Read the entire body in chronological order (oldest first)
-     *
-     * If the file has not yet wrapped, returns bytes [HEADER, HEADER+writePos).
-     * If wrapped, stitches the tail (oldest) followed by the head (newer).
-     *
-     * @return Body bytes as a string (binary-safe)
+     * @brief Read the entire body in chronological order (oldest first).
      */
     std::string readAll() const;
 
     /**
-     * @brief Get the full path to the underlying file
+     * @brief Get the full path to the underlying file.
      */
     std::string getFilePath() const;
 
     /**
-     * @brief Get the configured body size
+     * @brief Get the configured body size.
      */
     size_t getMaxBodyBytes() const
     {
@@ -132,27 +103,19 @@ public:
     }
 
     /**
-     * @brief Get the current monotonic write position (bytes ever written)
+     * @brief Get the current monotonic write position (bytes ever written).
      *
-     * @note This value monotonically increases and may exceed `max_body_bytes`.
-     *       Take `% max_body_bytes` to get the in-body offset.
+     * @note Monotonically increases across the lifetime of the file and may
+     *       exceed `max_body_bytes`. Take `% max_body_bytes` for the in-body
+     *       offset.
      */
     uint64_t getWritePos() const;
 
 private:
-    static constexpr size_t HEADER_SIZE = 8; ///< u64 writePos
+    RingFileSinkConfig      config_;
+    detail::RingFileStorage storage_;
+    mutable std::mutex      mutex_;
 
-    RingFileSinkConfig config_;
-    uint64_t write_pos_;
-    mutable std::mutex mutex_;
-
-    /// Create the file and pre-fill it if it does not yet exist.
-    void ensureFile();
-
-    /// Read writePos from disk into write_pos_.
-    void loadWritePos();
-
-    /// Format a LogMessage as text into `buf`. Returns bytes written (excluding NUL).
     int formatMessage(char *buf, size_t buf_size, const LogMessage &msg) const;
 };
 

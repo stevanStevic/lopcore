@@ -62,6 +62,19 @@ public:
     void addSink(std::unique_ptr<ILogSink> sink);
 
     /**
+     * @brief Remove a previously added sink by raw pointer
+     *
+     * The pointer must be the same `ILogSink*` returned by the `unique_ptr::get()`
+     * (or held externally) that was passed to `addSink`. After the call the sink
+     * is destroyed and removed from the dispatch list. If the pointer does not
+     * match any registered sink the call is a no-op.
+     *
+     * @param sink Raw pointer to the sink to remove (does not free).
+     * @return `true` if a sink was removed, `false` if no match.
+     */
+    bool removeSink(ILogSink *sink);
+
+    /**
      * @brief Remove all sinks
      */
     void clearSinks();

@@ -10,8 +10,8 @@
 
 #include <gtest/gtest.h>
 
-#include "logging/console_sink.hpp"
-#include "logging/logger.hpp"
+#include "lopcore/logging/console_sink.hpp"
+#include "lopcore/logging/logger.hpp"
 
 using namespace lopcore;
 
@@ -75,6 +75,56 @@ TEST_F(LoggerTest, ClearSinks)
 
     logger.clearSinks();
     EXPECT_EQ(logger.getSinkCount(), 0u);
+}
+
+/**
+ * @brief Test removing a specific sink by pointer
+ */
+TEST_F(LoggerTest, RemoveSinkByPointer)
+{
+    auto &logger = Logger::getInstance();
+
+    auto first = std::make_unique<ConsoleSink>();
+    auto second = std::make_unique<ConsoleSink>();
+    ILogSink *firstPtr = first.get();
+    ILogSink *secondPtr = second.get();
+
+    logger.addSink(std::move(first));
+    logger.addSink(std::move(second));
+    EXPECT_EQ(logger.getSinkCount(), 2u);
+
+    EXPECT_TRUE(logger.removeSink(firstPtr));
+    EXPECT_EQ(logger.getSinkCount(), 1u);
+
+    EXPECT_TRUE(logger.removeSink(secondPtr));
+    EXPECT_EQ(logger.getSinkCount(), 0u);
+}
+
+/**
+ * @brief Removing a sink that was never added is a no-op returning false
+ */
+TEST_F(LoggerTest, RemoveSinkUnknownPointerIsNoop)
+{
+    auto &logger = Logger::getInstance();
+
+    auto sink = std::make_unique<ConsoleSink>();
+    ConsoleSink unrelated;
+    logger.addSink(std::move(sink));
+    EXPECT_EQ(logger.getSinkCount(), 1u);
+
+    EXPECT_FALSE(logger.removeSink(&unrelated));
+    EXPECT_EQ(logger.getSinkCount(), 1u);
+}
+
+/**
+ * @brief removeSink(nullptr) is a no-op
+ */
+TEST_F(LoggerTest, RemoveSinkNullIsNoop)
+{
+    auto &logger = Logger::getInstance();
+    logger.addSink(std::make_unique<ConsoleSink>());
+    EXPECT_FALSE(logger.removeSink(nullptr));
+    EXPECT_EQ(logger.getSinkCount(), 1u);
 }
 
 /**

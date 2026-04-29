@@ -18,6 +18,7 @@ set(LOPCORE_SRCS
     "src/logging/logger.cpp"
     "src/logging/console_sink.cpp"
     "src/logging/file_sink.cpp"
+    "src/logging/ring_file_sink.cpp"
 
     # Storage subsystem
     "src/storage/spiffs_storage.cpp"

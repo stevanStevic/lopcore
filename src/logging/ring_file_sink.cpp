@@ -10,80 +10,44 @@
 
 #include <algorithm>
 #include <cstdio>
-#include <cstring>
 
 namespace lopcore
 {
 
-RingFileSink::RingFileSink(const RingFileSinkConfig &config) : config_(config), write_pos_(0)
+RingFileSink::RingFileSink(const RingFileSinkConfig &config)
+    : config_(config), storage_(config.base_path + "/" + config.filename, config.max_body_bytes)
 {
-    ensureFile();
-    loadWritePos();
 }
 
 std::string RingFileSink::getFilePath() const
 {
-    return config_.base_path + "/" + config_.filename;
+    return storage_.path();
 }
 
-void RingFileSink::ensureFile()
+const char *RingFileSink::getName() const
 {
-    const std::string path = getFilePath();
-
-    FILE *f = std::fopen(path.c_str(), "rb");
-    if (f != nullptr)
-    {
-        std::fclose(f);
-        return;
-    }
-
-    f = std::fopen(path.c_str(), "wb");
-    if (f == nullptr)
-    {
-        return;
-    }
-
-    const uint64_t writePos = 0;
-    std::fwrite(&writePos, sizeof(writePos), 1, f);
-
-    // Pre-fill the body so the file is its final size up-front.
-    const char zero = 0;
-    for (size_t i = 0; i < config_.max_body_bytes; ++i)
-    {
-        std::fwrite(&zero, 1, 1, f);
-    }
-    std::fclose(f);
+    return "RingFileSink";
 }
 
-void RingFileSink::loadWritePos()
+uint64_t RingFileSink::getWritePos() const
 {
-    const std::string path = getFilePath();
-    FILE *f = std::fopen(path.c_str(), "rb");
-    if (f == nullptr)
-    {
-        write_pos_ = 0;
-        return;
-    }
-    if (std::fread(&write_pos_, sizeof(write_pos_), 1, f) != 1)
-    {
-        write_pos_ = 0;
-    }
-    std::fclose(f);
+    std::lock_guard<std::mutex> lock(mutex_);
+    return storage_.writePos();
 }
 
 int RingFileSink::formatMessage(char *buf, size_t buf_size, const LogMessage &msg) const
 {
     const char *tag = (msg.tag != nullptr) ? msg.tag : "";
     const char *txt = (msg.message != nullptr) ? msg.message : "";
-    return std::snprintf(buf, buf_size, "[%10lu] %c (%s): %s\n", static_cast<unsigned long>(msg.timestamp_ms),
-                         logLevelToChar(msg.level), tag, txt);
+    return std::snprintf(buf, buf_size, "[%10lu] %c (%s): %s\n",
+                         static_cast<unsigned long>(msg.timestamp_ms), logLevelToChar(msg.level), tag, txt);
 }
 
 void RingFileSink::write(const LogMessage &msg)
 {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    if (config_.max_body_bytes == 0)
+    if (storage_.maxBodyBytes() == 0)
     {
         return;
     }
@@ -96,70 +60,24 @@ void RingFileSink::write(const LogMessage &msg)
     }
     const size_t bytes = static_cast<size_t>(std::min(static_cast<int>(sizeof(line) - 1), n));
 
-    const std::string path = getFilePath();
-    FILE *f = std::fopen(path.c_str(), "r+b");
-    if (f == nullptr)
-    {
-        return;
-    }
-
-    size_t remaining = bytes;
-    const char *p = line;
-    while (remaining > 0)
-    {
-        const size_t bodyOffset = static_cast<size_t>(write_pos_ % config_.max_body_bytes);
-        const size_t spaceToEnd = config_.max_body_bytes - bodyOffset;
-        const size_t chunk = (remaining < spaceToEnd) ? remaining : spaceToEnd;
-
-        std::fseek(f, static_cast<long>(HEADER_SIZE + bodyOffset), SEEK_SET);
-        std::fwrite(p, 1, chunk, f);
-
-        p += chunk;
-        remaining -= chunk;
-        write_pos_ += chunk;
-    }
-
-    std::fseek(f, 0, SEEK_SET);
-    std::fwrite(&write_pos_, sizeof(write_pos_), 1, f);
-    std::fflush(f);
-    std::fclose(f);
+    storage_.writeWrapped(storage_.writePos(), line, bytes);
+    storage_.advanceAndPersist(bytes);
 }
 
 void RingFileSink::flush()
 {
-    // No buffering above the FILE* layer; writes already fflush'd.
-}
-
-const char *RingFileSink::getName() const
-{
-    return "RingFileSink";
-}
-
-uint64_t RingFileSink::getWritePos() const
-{
-    std::lock_guard<std::mutex> lock(mutex_);
-    return write_pos_;
+    // No buffering above the FILE* layer; writes are already fflush'd.
 }
 
 std::string RingFileSink::readAll() const
 {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    const std::string path = getFilePath();
-    FILE *f = std::fopen(path.c_str(), "rb");
-    if (f == nullptr)
-    {
-        return {};
-    }
-
-    uint64_t writePos = 0;
-    std::fread(&writePos, sizeof(writePos), 1, f);
-
-    const size_t maxBody = config_.max_body_bytes;
-    const size_t total = (writePos < maxBody) ? static_cast<size_t>(writePos) : maxBody;
+    const uint64_t writePos = storage_.writePos();
+    const size_t   maxBody  = storage_.maxBodyBytes();
+    const size_t   total    = (writePos < maxBody) ? static_cast<size_t>(writePos) : maxBody;
     if (total == 0)
     {
-        std::fclose(f);
         return {};
     }
 
@@ -168,21 +86,16 @@ std::string RingFileSink::readAll() const
 
     if (writePos < maxBody)
     {
-        std::fseek(f, static_cast<long>(HEADER_SIZE), SEEK_SET);
-        std::fread(body.data(), 1, total, f);
+        storage_.readBytes(0, body.data(), total);
     }
     else
     {
-        // Wrapped. Oldest is at offset (writePos % maxBody); read tail then head.
-        const size_t pos = static_cast<size_t>(writePos % maxBody);
+        const size_t pos     = static_cast<size_t>(writePos % maxBody);
         const size_t tailLen = maxBody - pos;
-        std::fseek(f, static_cast<long>(HEADER_SIZE + pos), SEEK_SET);
-        std::fread(body.data(), 1, tailLen, f);
-        std::fseek(f, static_cast<long>(HEADER_SIZE), SEEK_SET);
-        std::fread(body.data() + tailLen, 1, pos, f);
+        storage_.readBytes(pos, body.data(), tailLen);
+        storage_.readBytes(0, body.data() + tailLen, pos);
     }
 
-    std::fclose(f);
     return body;
 }
 

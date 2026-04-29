@@ -67,6 +67,7 @@ target_link_libraries(test_file_sink GTest::gtest_main)
 add_executable(test_ring_file_sink
     unit/test_ring_file_sink.cpp
     ${LOPCORE_BASE_DIR}/src/logging/ring_file_sink.cpp
+    ${LOPCORE_BASE_DIR}/src/storage/ring_file_storage.cpp
 )
 target_link_libraries(test_ring_file_sink GTest::gtest_main)
 
@@ -76,6 +77,13 @@ gtest_discover_tests(test_dummy)
 gtest_discover_tests(test_logger)
 gtest_discover_tests(test_file_sink)
 gtest_discover_tests(test_ring_file_sink)
+
+add_executable(test_ring_record_file
+    unit/test_ring_record_file.cpp
+    ${LOPCORE_BASE_DIR}/src/storage/ring_file_storage.cpp
+)
+target_link_libraries(test_ring_record_file GTest::gtest_main)
+gtest_discover_tests(test_ring_record_file)
 
 add_executable(test_littlefs_storage
     unit/test_littlefs_storage.cpp

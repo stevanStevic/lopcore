@@ -47,6 +47,24 @@ void Logger::addSink(std::unique_ptr<ILogSink> sink)
     sinks_.push_back(std::move(sink));
 }
 
+bool Logger::removeSink(ILogSink *sink)
+{
+    if (sink == nullptr)
+    {
+        return false;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (auto it = sinks_.begin(); it != sinks_.end(); ++it)
+    {
+        if (it->get() == sink)
+        {
+            sinks_.erase(it);
+            return true;
+        }
+    }
+    return false;
+}
+
 void Logger::clearSinks()
 {
     std::lock_guard<std::mutex> lock(mutex_);

@@ -64,11 +64,18 @@ add_executable(test_file_sink
 )
 target_link_libraries(test_file_sink GTest::gtest_main)
 
+add_executable(test_ring_file_sink
+    unit/test_ring_file_sink.cpp
+    ${LOPCORE_BASE_DIR}/src/logging/ring_file_sink.cpp
+)
+target_link_libraries(test_ring_file_sink GTest::gtest_main)
+
 # Add tests to CTest
 include(GoogleTest)
 gtest_discover_tests(test_dummy)
 gtest_discover_tests(test_logger)
 gtest_discover_tests(test_file_sink)
+gtest_discover_tests(test_ring_file_sink)
 
 add_executable(test_littlefs_storage
     unit/test_littlefs_storage.cpp

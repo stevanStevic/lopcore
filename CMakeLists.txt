@@ -19,6 +19,7 @@ set(LOPCORE_SRCS
     "src/logging/console_sink.cpp"
     "src/logging/file_sink.cpp"
     "src/logging/ring_file_sink.cpp"
+    "src/logging/queued_sink.cpp"
     "src/storage/ring_file_storage.cpp"
 
     # Storage subsystem

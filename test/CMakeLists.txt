@@ -27,11 +27,12 @@ enable_testing()
 set(LOPCORE_BASE_DIR ${CMAKE_SOURCE_DIR}/..)
 
 # Include directories - new unified structure
+# NOTE: include/lopcore is added so pre-restructure test includes
+# (e.g. "mqtt/mqtt_config.hpp") keep resolving alongside the canonical
+# "lopcore/mqtt/..." form used by the library itself.
 include_directories(
     ${LOPCORE_BASE_DIR}/include
-    ${LOPCORE_BASE_DIR}/provisioning/include
-    ${LOPCORE_BASE_DIR}/state_machine/include
-    ${LOPCORE_BASE_DIR}/commands/include
+    ${LOPCORE_BASE_DIR}/include/lopcore
     ${CMAKE_SOURCE_DIR}/mocks
 )
 
@@ -153,6 +154,26 @@ add_executable(test_coremqtt_client_simple
 )
 target_link_libraries(test_coremqtt_client_simple GTest::gtest_main pthread)
 gtest_discover_tests(test_coremqtt_client_simple)
+
+# Regression tests for the processLoop callback re-entrancy deadlock.
+# A regression re-introducing the deadlock hangs; the TIMEOUT catches it.
+add_executable(test_coremqtt_client_reentrancy
+    unit/mqtt/test_coremqtt_client_reentrancy.cpp
+    ${LOPCORE_BASE_DIR}/src/mqtt/coremqtt_client.cpp
+    ${LOPCORE_BASE_DIR}/src/mqtt/mqtt_budget.cpp
+    ${LOPCORE_BASE_DIR}/src/logging/logger.cpp
+    ${LOPCORE_BASE_DIR}/src/logging/queued_sink.cpp
+)
+target_link_libraries(test_coremqtt_client_reentrancy GTest::gtest_main pthread)
+gtest_discover_tests(test_coremqtt_client_reentrancy PROPERTIES TIMEOUT 60)
+
+# Asynchronous (queued) log sink decorator
+add_executable(test_queued_sink
+    unit/test_queued_sink.cpp
+    ${LOPCORE_BASE_DIR}/src/logging/queued_sink.cpp
+)
+target_link_libraries(test_queued_sink GTest::gtest_main pthread)
+gtest_discover_tests(test_queued_sink PROPERTIES TIMEOUT 60)
 
 # Phase 4: CoreMQTT client tests (full - disabled until ESP-IDF integration)
 #add_executable(test_coremqtt_client

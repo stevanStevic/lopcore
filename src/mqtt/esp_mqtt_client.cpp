@@ -514,17 +514,27 @@ void EspMqttClient::handleData(esp_mqtt_event_handle_t event)
     msg.retained = event->retain;
     msg.messageId = event->msg_id;
 
-    // Find matching subscriptions and invoke callbacks
-    std::lock_guard<std::mutex> lock(subscriptionsMutex_);
-    for (const auto &[pattern, callback] : subscriptions_)
+    // Copy matching callbacks out under the lock, then invoke them with the
+    // lock released: a callback may call subscribe()/unsubscribe(), which
+    // take subscriptionsMutex_ again and would self-deadlock on this
+    // (non-recursive) mutex. esp-mqtt dispatches events from its own task,
+    // so dispatch stays serialized without holding the lock. This matches
+    // CoreMqttClient's contract: callbacks may call any client method.
+    std::vector<MessageCallback> matched;
     {
-        if (topicMatches(pattern, topic))
+        std::lock_guard<std::mutex> lock(subscriptionsMutex_);
+        for (const auto &[pattern, callback] : subscriptions_)
         {
-            if (callback)
+            if (topicMatches(pattern, topic) && callback)
             {
-                callback(msg);
+                matched.push_back(callback);
             }
         }
+    }
+
+    for (const auto &callback : matched)
+    {
+        callback(msg);
     }
 }
 

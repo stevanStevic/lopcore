@@ -7,8 +7,18 @@
 
 #pragma once
 
+// This header is included from inside an `extern "C"` block by
+// coremqtt_client.hpp (matching how the real coreMQTT header is consumed),
+// so all C++-only machinery below must be wrapped in `extern "C++"`.
+#ifdef __cplusplus
+extern "C++" {
 #include <cstddef>
 #include <cstdint>
+#include <deque>
+#include <mutex>
+#include <string>
+}
+#endif
 
 #include "transport_interface.h"
 
@@ -163,9 +173,13 @@ typedef struct MQTTFixedBuffer
 struct MQTTContext;
 
 // MQTT context
+// NOTE: mirrors the real coreMQTT context closely enough for the wrapper:
+// transportInterface is held BY VALUE and appCallback is stored by
+// MQTT_Init, exactly like the real library (the wrapper dereferences
+// pContext->transportInterface.pNetworkContext in its event callback).
 typedef struct MQTTContext
 {
-    const TransportInterface_t *pNetworkInterface;
+    TransportInterface_t transportInterface;
     MQTTFixedBuffer_t networkBuffer;
     MQTTGetCurrentTimeFunc_t getTime;
     MQTTEventCallback_t appCallback;
@@ -186,8 +200,10 @@ inline MQTTStatus_t MQTT_Init(MQTTContext_t *pContext,
 {
     if (pContext != nullptr && pTransportInterface != nullptr && pNetworkBuffer != nullptr)
     {
-        pContext->pNetworkInterface = pTransportInterface;
+        pContext->transportInterface = *pTransportInterface;
+        pContext->networkBuffer = *pNetworkBuffer;
         pContext->getTime = getTimeFunction;
+        pContext->appCallback = userCallback;
         pContext->connectStatus = MQTTNotConnected;
         return MQTTSuccess;
     }
@@ -284,13 +300,104 @@ inline MQTTStatus_t MQTT_Publish(MQTTContext_t *pContext,
     return MQTTSuccess;
 }
 
+// ---------------------------------------------------------------------------
+// Test-injection support: queue synthetic incoming PUBLISH packets that
+// MQTT_ProcessLoop delivers to the registered appCallback, synchronously on
+// the calling thread - exactly mirroring the real coreMQTT dispatch path.
+// ---------------------------------------------------------------------------
+
+#ifdef __cplusplus
+extern "C++" {
+#endif
+namespace MockCoreMqtt
+{
+struct IncomingPublish
+{
+    std::string topic;
+    std::string payload;
+    MQTTQoS_t qos{MQTTQoS0};
+    bool retain{false};
+};
+
+inline std::deque<IncomingPublish> &incomingQueue()
+{
+    static std::deque<IncomingPublish> queue;
+    return queue;
+}
+
+inline std::mutex &incomingMutex()
+{
+    static std::mutex m;
+    return m;
+}
+
 /**
- * @brief Process loop (mock - no-op)
+ * @brief Queue an incoming PUBLISH; the next MQTT_ProcessLoop call delivers it
+ */
+inline void enqueueIncomingPublish(const std::string &topic,
+                                   const std::string &payload,
+                                   MQTTQoS_t qos = MQTTQoS0,
+                                   bool retain = false)
+{
+    std::lock_guard<std::mutex> lock(incomingMutex());
+    incomingQueue().push_back({topic, payload, qos, retain});
+}
+
+inline void clearIncomingPublishes()
+{
+    std::lock_guard<std::mutex> lock(incomingMutex());
+    incomingQueue().clear();
+}
+} // namespace MockCoreMqtt
+#ifdef __cplusplus
+}
+#endif
+
+/**
+ * @brief Process loop (mock)
+ *
+ * Delivers at most one queued incoming PUBLISH per call via appCallback
+ * (matching the real library's one-packet-per-call behavior), otherwise
+ * returns MQTTNeedMoreBytes ("no data available yet").
  */
 inline MQTTStatus_t MQTT_ProcessLoop(MQTTContext_t *pContext)
 {
-    // Mock implementation - just return success
-    (void) pContext;
+    if (pContext == nullptr)
+    {
+        return MQTTBadParameter;
+    }
+
+    MockCoreMqtt::IncomingPublish incoming;
+    {
+        std::lock_guard<std::mutex> lock(MockCoreMqtt::incomingMutex());
+        if (MockCoreMqtt::incomingQueue().empty())
+        {
+            return MQTTNeedMoreBytes;
+        }
+        incoming = MockCoreMqtt::incomingQueue().front();
+        MockCoreMqtt::incomingQueue().pop_front();
+    }
+
+    if (pContext->appCallback != nullptr)
+    {
+        MQTTPublishInfo_t publishInfo = {};
+        publishInfo.qos = incoming.qos;
+        publishInfo.retain = incoming.retain;
+        publishInfo.pTopicName = incoming.topic.c_str();
+        publishInfo.topicNameLength = static_cast<uint16_t>(incoming.topic.length());
+        publishInfo.pPayload = incoming.payload.data();
+        publishInfo.payloadLength = incoming.payload.size();
+
+        MQTTPacketInfo_t packetInfo = {};
+        packetInfo.type = MQTT_PACKET_TYPE_PUBLISH;
+
+        MQTTDeserializedInfo_t deserializedInfo = {};
+        deserializedInfo.pPublishInfo = &publishInfo;
+        deserializedInfo.packetIdentifier = 1;
+
+        pContext->appCallback(pContext, &packetInfo, &deserializedInfo);
+    }
+
     return MQTTSuccess;
 }
 

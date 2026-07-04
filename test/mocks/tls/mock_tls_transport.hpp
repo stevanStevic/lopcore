@@ -21,6 +21,7 @@
 #include <queue>
 #include <vector>
 
+#include "tls/network_context.h"
 #include "tls/tls_config.hpp"
 #include "tls/tls_transport.hpp"
 
@@ -154,11 +155,14 @@ public:
     }
 
     /**
-     * @brief Get opaque network context (returns nullptr for mock)
+     * @brief Get opaque network context
+     *
+     * Returns a real NetworkContext_t so CoreMqttClient's constructor (which
+     * copies it and installs its back-reference) succeeds against the mock.
      */
     void *getNetworkContext() noexcept override
     {
-        return nullptr; // Mock doesn't have real network context
+        return &networkContext_;
     }
 
     // =================================================================
@@ -319,6 +323,10 @@ private:
     std::queue<TransportResult> sendResults_;
     std::queue<TransportResult> receiveResults_;
     std::queue<std::vector<uint8_t>> receiveDataQueue_;
+
+    // Network context handed to CoreMqttClient (which copies it and sets the
+    // client back-reference on its own copy)
+    NetworkContext_t networkContext_{};
 };
 
 } // namespace test

@@ -15,10 +15,38 @@
 #include <cstring>
 
 #include "lopcore/logging/logger.hpp"
-#include "lopcore/tls/mbedtls_transport.hpp"
 #include "lopcore/tls/tls_config.hpp"
+#include "lopcore/tls/tls_transport.hpp"
 
 static const char *TAG = "coremqtt_client";
+
+namespace
+{
+
+/**
+ * @brief Sets a flag for the enclosing scope; the destructor clears it on
+ *        every exit path (early returns included)
+ */
+class ScopedFlag
+{
+public:
+    explicit ScopedFlag(bool &flag) : flag_(flag)
+    {
+        flag_ = true;
+    }
+    ~ScopedFlag()
+    {
+        flag_ = false;
+    }
+
+    ScopedFlag(const ScopedFlag &) = delete;
+    ScopedFlag &operator=(const ScopedFlag &) = delete;
+
+private:
+    bool &flag_;
+};
+
+} // namespace
 
 namespace lopcore
 {
@@ -139,7 +167,7 @@ CoreMqttClient::~CoreMqttClient()
 
 esp_err_t CoreMqttClient::connect()
 {
-    std::unique_lock<std::mutex> lock(mutex_);
+    std::unique_lock<std::recursive_mutex> lock(mutex_);
 
     if (state_ == MqttConnectionState::CONNECTED)
     {
@@ -273,7 +301,7 @@ esp_err_t CoreMqttClient::disconnect()
     bool wasConnected = false;
 
     {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
 
         if (state_ != MqttConnectionState::DISCONNECTED)
         {
@@ -326,7 +354,7 @@ esp_err_t CoreMqttClient::publish(const std::string &topic,
                                   MqttQos qos,
                                   bool retain)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     if (state_ != MqttConnectionState::CONNECTED)
     {
@@ -386,7 +414,7 @@ CoreMqttClient::publishString(const std::string &topic, const std::string &paylo
 
 esp_err_t CoreMqttClient::subscribe(const std::string &topic, MessageCallback callback, MqttQos qos)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     if (state_ != MqttConnectionState::CONNECTED)
     {
@@ -428,7 +456,7 @@ esp_err_t CoreMqttClient::subscribe(const std::string &topic, MessageCallback ca
 
 esp_err_t CoreMqttClient::unsubscribe(const std::string &topic)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     if (state_ != MqttConnectionState::CONNECTED)
     {
@@ -481,13 +509,13 @@ esp_err_t CoreMqttClient::setWillMessage(const std::string &topic,
 
 void CoreMqttClient::setConnectionCallback(ConnectionCallback callback)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     connectionCallback_ = callback;
 }
 
 void CoreMqttClient::setErrorCallback(ErrorCallback callback)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     errorCallback_ = callback;
 }
 
@@ -497,13 +525,13 @@ void CoreMqttClient::setErrorCallback(ErrorCallback callback)
 
 MqttStatistics CoreMqttClient::getStatistics() const
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return statistics_;
 }
 
 void CoreMqttClient::resetStatistics()
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     statistics_ = MqttStatistics{};
 }
 
@@ -513,12 +541,25 @@ void CoreMqttClient::resetStatistics()
 
 esp_err_t CoreMqttClient::processLoop(uint32_t timeoutMs)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+
+    // Reject re-entrant calls from a subscription callback. The recursive
+    // mutex would let the call through, but re-entering MQTT_ProcessLoop()
+    // would reuse the RX network buffer that the outer call is still parsing.
+    if (inProcessLoop_)
+    {
+        LOPCORE_LOGW(TAG, "processLoop() called from a message callback - rejected");
+        return ESP_ERR_INVALID_STATE;
+    }
 
     if (state_ != MqttConnectionState::CONNECTED)
     {
         return ESP_ERR_INVALID_STATE;
     }
+
+    // Set for the whole call (mutex_ is held throughout); cleared on every
+    // return path so a missed reset can never permanently reject processLoop()
+    ScopedFlag inProcessLoopGuard(inProcessLoop_);
 
     // Calculate timeout deadline
     uint32_t startTimeMs = getTimeMs();
@@ -530,9 +571,12 @@ esp_err_t CoreMqttClient::processLoop(uint32_t timeoutMs)
     // Call MQTT_ProcessLoop repeatedly until timeout expires.
     // MQTT_ProcessLoop() processes exactly one MQTT packet per call.
     // MQTTNeedMoreBytes means "no data available yet, try again".
-    // NOTE: mutex IS held here; eventCallback (and thus user MessageCallbacks)
-    // are fired from within MQTT_ProcessLoop() on this same thread.
-    // User callbacks must NOT call back into publish()/subscribe() etc.
+    // NOTE: mutex_ IS held here (recursively); eventCallback (and thus user
+    // MessageCallbacks) are fired from within MQTT_ProcessLoop() on this same
+    // thread. Callbacks MAY call publish()/subscribe()/unsubscribe() (the
+    // recursive mutex admits same-thread re-entry, and coreMQTT's TX path
+    // never touches the RX buffer), but must NOT call processLoop() itself -
+    // see the guard above.
     while ((currentTimeMs < endTimeMs) && (mqttStatus == MQTTSuccess || mqttStatus == MQTTNeedMoreBytes))
     {
         // Check if we're still connected before each blocking call
@@ -566,7 +610,7 @@ esp_err_t CoreMqttClient::processLoop(uint32_t timeoutMs)
 
 MQTTPublishState_t CoreMqttClient::getPublishState(uint16_t packetId) const
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     for (const auto &record : outgoingPublishRecords_)
     {
@@ -581,7 +625,7 @@ MQTTPublishState_t CoreMqttClient::getPublishState(uint16_t packetId) const
 
 bool CoreMqttClient::hasOutstandingPackets() const
 {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     for (const auto &record : outgoingPublishRecords_)
     {
@@ -856,6 +900,10 @@ esp_err_t CoreMqttClient::startProcessLoopTask()
         return ESP_ERR_INVALID_STATE;
     }
 
+    // Drain a stale "stopped" signal left by a task that exited on its own
+    // (deferred stop from stopProcessLoopTask() called on the task itself).
+    xSemaphoreTake(taskStoppedSemaphore_, 0);
+
     shouldRun_ = true;
     BaseType_t xReturned = xTaskCreate(processLoopTaskWrapper,
                                        "coremqtt_loop", // Task name
@@ -888,6 +936,18 @@ esp_err_t CoreMqttClient::stopProcessLoopTask()
 
     // Signal task to stop (atomic - no mutex needed)
     shouldRun_ = false;
+
+    // Called from the ProcessLoop task itself (e.g. disconnect() from inside
+    // a message callback): waiting on our own exit would time out and then
+    // vTaskDelete() the CURRENT task mid-callback. Let the task wind down on
+    // its own; it exits its loop and self-deletes after the callback returns.
+    // The semaphore it gives on exit is drained by startProcessLoopTask().
+    if (processTask_ == xTaskGetCurrentTaskHandle())
+    {
+        LOPCORE_LOGI(TAG, "stopProcessLoopTask() called from the ProcessLoop task itself - deferred exit");
+        processTask_ = nullptr;
+        return ESP_OK;
+    }
 
     // Wait for task to signal completion via semaphore.
     // Task will exit its loop and give the semaphore before deleting itself.
@@ -979,7 +1039,7 @@ void CoreMqttClient::processLoopTask()
 
         // Sleep between iterations to prevent busy-waiting.
         // Break into 10ms chunks so shouldRun_ is checked frequently.
-        for (int i = 0; i < (int)config_.processLoopDelayMs && shouldRun_; i += 10)
+        for (int i = 0; i < (int) config_.processLoopDelayMs && shouldRun_; i += 10)
         {
             vTaskDelay(pdMS_TO_TICKS(10));
         }

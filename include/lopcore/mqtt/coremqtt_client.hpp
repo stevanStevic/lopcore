@@ -28,6 +28,7 @@
 #include <esp_timer.h>
 
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "lopcore/mqtt/mqtt_budget.hpp"
 #include "lopcore/mqtt/mqtt_config.hpp"
@@ -93,8 +94,24 @@ namespace mqtt
  * - Memory-constrained devices
  *
  * Thread Safety:
- * - Methods are thread-safe via mutex
+ * - Methods are thread-safe via a recursive mutex
  * - processLoop() must be called regularly (manually or via background task)
+ * - Subscription callbacks are invoked from within processLoop() on the
+ *   calling thread (manual pump or the background ProcessLoop task) while the
+ *   client mutex is held recursively. Because the mutex is recursive, a
+ *   callback MAY call publish(), publishString(), subscribe() and
+ *   unsubscribe() on the same client (re-entrant coreMQTT sends are safe:
+ *   the TX path serializes into stack headers and never touches the RX
+ *   network buffer).
+ * - A callback must NOT call processLoop() (rejected with
+ *   ESP_ERR_INVALID_STATE: re-entering MQTT_ProcessLoop would reuse the RX
+ *   buffer mid-parse) and should avoid disconnect() (tolerated: the client
+ *   tears down and the in-flight processLoop() returns an error, but prefer
+ *   signalling the owning task instead).
+ * - Note for log sinks that publish over this client: a sink that publishes
+ *   synchronously from arbitrary threads can still deadlock against the
+ *   global Logger lock (lock-order inversion). Use a queued/async sink (see
+ *   lopcore/logging/queued_sink.hpp).
  */
 class CoreMqttClient
 {
@@ -380,9 +397,11 @@ private:
     ConnectionCallback connectionCallback_;                     ///< Connection callback
     ErrorCallback errorCallback_;                               ///< Error callback
     MqttStatistics statistics_;                                 ///< Statistics
-    mutable std::mutex mutex_;                                  ///< Thread safety
-    TaskHandle_t processTask_;                                  ///< Process loop task handle
-    std::atomic<bool> shouldRun_;            ///< Process loop control (atomic, no mutex needed)
+    mutable std::recursive_mutex mutex_; ///< Thread safety (recursive: subscription callbacks fired from
+                                         ///< processLoop() may re-enter publish()/subscribe()/unsubscribe())
+    bool inProcessLoop_ = false;  ///< Guarded by mutex_; rejects re-entrant processLoop() from callbacks
+    TaskHandle_t processTask_;    ///< Process loop task handle
+    std::atomic<bool> shouldRun_; ///< Process loop control (atomic, no mutex needed)
     SemaphoreHandle_t taskStoppedSemaphore_; ///< Signals when task has stopped
 };
 

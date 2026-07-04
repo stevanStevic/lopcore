@@ -1,12 +1,15 @@
 /**
  * @file test_coremqtt_client_simple.cpp
- * @brief Simplified unit tests for CoreMqttClient (ProcessLoop configuration)
+ * @brief Simplified unit tests for CoreMqttClient (construction + ProcessLoop configuration)
  */
+
+#include <memory>
 
 #include <gtest/gtest.h>
 
 #include "mqtt/coremqtt_client.hpp"
 #include "mqtt/mqtt_config.hpp"
+#include "tls/mock_tls_transport.hpp"
 
 using namespace lopcore::mqtt;
 
@@ -26,9 +29,16 @@ protected:
                      .keepAlive(std::chrono::seconds(60))
                      .cleanSession(true)
                      .build();
+
+        // Connected mock transport (CoreMqttClient requires a connected
+        // transport at construction time)
+        transport = std::make_shared<lopcore::test::MockTlsTransport>();
+        transport->connect(lopcore::tls::TlsConfig{});
+        ASSERT_TRUE(transport->isConnected());
     }
 
     MqttConfig config;
+    std::shared_ptr<lopcore::test::MockTlsTransport> transport;
 };
 
 // =============================================================================
@@ -38,7 +48,7 @@ protected:
 TEST_F(CoreMqttClientSimpleTest, Construction_ValidConfig)
 {
     ASSERT_NO_THROW({
-        CoreMqttClient client(config);
+        CoreMqttClient client(config, transport);
         EXPECT_EQ(client.getClientId(), "test-client-123");
         EXPECT_EQ(client.getBroker(), "test-broker.example.com");
         EXPECT_EQ(client.getPort(), 8883);
@@ -53,8 +63,8 @@ TEST_F(CoreMqttClientSimpleTest, Construction_ValidConfig)
 
 TEST_F(CoreMqttClientSimpleTest, ProcessLoopDelay_DefaultValue)
 {
-    CoreMqttClient client(config);
-    
+    CoreMqttClient client(config, transport);
+
     // Default should be 10ms
     EXPECT_EQ(config.processLoopDelayMs, 10);
 }
@@ -62,31 +72,31 @@ TEST_F(CoreMqttClientSimpleTest, ProcessLoopDelay_DefaultValue)
 TEST_F(CoreMqttClientSimpleTest, ProcessLoopDelay_CustomValue_Low)
 {
     config.processLoopDelayMs = 1; // 1ms for real-time
-    CoreMqttClient client(config);
-    
+    CoreMqttClient client(config, transport);
+
     EXPECT_EQ(config.processLoopDelayMs, 1);
 }
 
 TEST_F(CoreMqttClientSimpleTest, ProcessLoopDelay_CustomValue_High)
 {
     config.processLoopDelayMs = 100; // 100ms for low power
-    CoreMqttClient client(config);
-    
+    CoreMqttClient client(config, transport);
+
     EXPECT_EQ(config.processLoopDelayMs, 100);
 }
 
 TEST_F(CoreMqttClientSimpleTest, ProcessLoopDelay_CustomValue_Maximum)
 {
     config.processLoopDelayMs = 1000; // Maximum allowed
-    CoreMqttClient client(config);
-    
+    CoreMqttClient client(config, transport);
+
     EXPECT_EQ(config.processLoopDelayMs, 1000);
 }
 
 TEST_F(CoreMqttClientSimpleTest, ProcessLoopAutoStart_DefaultEnabled)
 {
-    CoreMqttClient client(config);
-    
+    CoreMqttClient client(config, transport);
+
     // Default should be true
     EXPECT_TRUE(config.autoStartProcessLoop);
 }
@@ -94,15 +104,15 @@ TEST_F(CoreMqttClientSimpleTest, ProcessLoopAutoStart_DefaultEnabled)
 TEST_F(CoreMqttClientSimpleTest, ProcessLoopAutoStart_Disabled)
 {
     config.autoStartProcessLoop = false;
-    CoreMqttClient client(config);
-    
+    CoreMqttClient client(config, transport);
+
     EXPECT_FALSE(config.autoStartProcessLoop);
 }
 
 TEST_F(CoreMqttClientSimpleTest, ProcessLoopTask_NotRunningInitially)
 {
-    CoreMqttClient client(config);
-    
+    CoreMqttClient client(config, transport);
+
     // Task should not be running before connect
     EXPECT_FALSE(client.isProcessLoopTaskRunning());
 }
@@ -111,15 +121,15 @@ TEST_F(CoreMqttClientSimpleTest, ProcessLoopDelay_CommonValues)
 {
     // Test common use case values
     std::vector<uint32_t> commonDelays = {1, 5, 10, 20, 50, 100, 500, 1000};
-    
+
     for (uint32_t delay : commonDelays)
     {
         MqttConfig testConfig = config;
         testConfig.processLoopDelayMs = delay;
-        
+
         EXPECT_EQ(testConfig.validate(), ESP_OK);
-        
-        CoreMqttClient client(testConfig);
+
+        CoreMqttClient client(testConfig, transport);
         EXPECT_EQ(testConfig.processLoopDelayMs, delay);
     }
 }

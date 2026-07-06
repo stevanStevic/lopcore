@@ -8,24 +8,35 @@
 #include <mqtt/mqtt_types.hpp>
 
 using namespace lopcore::mqtt;
+using lopcore::tls::TlsConfigBuilder;
 
 // =============================================================================
 // TlsConfig Tests
 // =============================================================================
+// TlsConfig no longer carries an 'enabled' flag: MqttConfig::tls is a
+// std::optional<lopcore::tls::TlsConfig> and presence == enabled.
 
 TEST(MqttConfigTest, TlsConfigValidation_Disabled)
 {
-    TlsConfig config;
-    config.enabled = false;
+    // "TLS disabled" is now expressed by leaving MqttConfig::tls unset.
+    MqttConfig config;
+    config.broker = "mqtt.example.com";
+    config.port = 1883;
+    config.clientId = "test-client";
 
+    EXPECT_FALSE(config.tls.has_value());
     EXPECT_EQ(config.validate(), ESP_OK);
 }
 
 TEST(MqttConfigTest, TlsConfigValidation_MissingCaCert)
 {
     TlsConfig config;
-    config.enabled = true;
-    config.caCertPath = "";
+    config.hostname = "mqtt.example.com";
+    config.port = 8883;
+    config.verifyPeer = true;
+    config.clientCertLabel = "device_cert";
+    config.clientKeyLabel = "device_key";
+    config.caCertPath = ""; // PKCS#11 credentials require a CA certificate
 
     EXPECT_EQ(config.validate(), ESP_ERR_INVALID_ARG);
 }
@@ -33,7 +44,8 @@ TEST(MqttConfigTest, TlsConfigValidation_MissingCaCert)
 TEST(MqttConfigTest, TlsConfigValidation_MissingClientCreds)
 {
     TlsConfig config;
-    config.enabled = true;
+    config.hostname = "mqtt.example.com";
+    config.port = 8883;
     config.caCertPath = "/spiffs/certs/ca.crt";
     config.verifyPeer = true;
     config.clientCertLabel = "";
@@ -45,7 +57,8 @@ TEST(MqttConfigTest, TlsConfigValidation_MissingClientCreds)
 TEST(MqttConfigTest, TlsConfigValidation_Valid)
 {
     TlsConfig config;
-    config.enabled = true;
+    config.hostname = "mqtt.example.com";
+    config.port = 8883;
     config.caCertPath = "/spiffs/certs/ca.crt";
     config.clientCertLabel = "device_cert";
     config.clientKeyLabel = "device_key";
@@ -333,10 +346,11 @@ TEST(MqttConfigTest, BuilderWithAuthentication)
 TEST(MqttConfigTest, BuilderWithTls)
 {
     auto tlsConfig = TlsConfigBuilder()
-                         .enableTls(true)
-                         .caCertPath("/spiffs/certs/ca.crt")
-                         .clientCertLabel("device_cert")
-                         .clientKeyLabel("device_key")
+                         .hostname("mqtt.example.com")
+                         .port(8883)
+                         .caCertificate("/spiffs/certs/ca.crt")
+                         .clientCertificate("device_cert")
+                         .privateKey("device_key")
                          .alpn("x-amzn-mqtt-ca")
                          .verifyPeer(true)
                          .build();
@@ -348,12 +362,13 @@ TEST(MqttConfigTest, BuilderWithTls)
                       .tlsConfig(tlsConfig)
                       .build();
 
-    EXPECT_TRUE(config.tls.enabled);
-    EXPECT_EQ(config.tls.caCertPath, "/spiffs/certs/ca.crt");
-    EXPECT_EQ(config.tls.clientCertLabel, "device_cert");
-    EXPECT_EQ(config.tls.clientKeyLabel, "device_key");
-    EXPECT_EQ(config.tls.alpn.value(), "x-amzn-mqtt-ca");
-    EXPECT_TRUE(config.tls.verifyPeer);
+    ASSERT_TRUE(config.tls.has_value()); // presence == TLS enabled
+    EXPECT_EQ(config.tls->caCertPath, "/spiffs/certs/ca.crt");
+    EXPECT_EQ(config.tls->clientCertLabel, "device_cert");
+    EXPECT_EQ(config.tls->clientKeyLabel, "device_key");
+    ASSERT_EQ(config.tls->alpnProtocols.size(), 1u);
+    EXPECT_EQ(config.tls->alpnProtocols[0], "x-amzn-mqtt-ca");
+    EXPECT_TRUE(config.tls->verifyPeer);
 }
 
 TEST(MqttConfigTest, BuilderWithBudgeting)
@@ -439,13 +454,14 @@ TEST(MqttConfigTest, BuilderCompleteConfiguration)
                       .cleanSession(true)
                       .networkBufferSize(8192)
                       .tlsConfig(TlsConfigBuilder()
-                                     .enableTls(true)
-                                     .caCertPath("/spiffs/certs/AmazonRootCA1.crt")
-                                     .clientCertLabel("device_cert")
-                                     .clientKeyLabel("device_key")
+                                     .hostname("a1234567890abc-ats.iot.us-east-1.amazonaws.com")
+                                     .port(8883)
+                                     .caCertificate("/spiffs/certs/AmazonRootCA1.crt")
+                                     .clientCertificate("device_cert")
+                                     .privateKey("device_key")
                                      .alpn("x-amzn-mqtt-ca")
                                      .verifyPeer(true)
-                                     .timeout(10000)
+                                     .connectionTimeout(std::chrono::milliseconds(10000))
                                      .build())
                       .budgetConfig(BudgetConfigBuilder()
                                         .enabled(true)
@@ -473,7 +489,7 @@ TEST(MqttConfigTest, BuilderCompleteConfiguration)
     // Verify all components
     EXPECT_EQ(config.broker, "a1234567890abc-ats.iot.us-east-1.amazonaws.com");
     EXPECT_EQ(config.port, 8883);
-    EXPECT_TRUE(config.tls.enabled);
+    EXPECT_TRUE(config.tls.has_value()); // presence == TLS enabled
     EXPECT_TRUE(config.budget.enabled);
     EXPECT_TRUE(config.reconnect.autoReconnect);
     EXPECT_TRUE(config.will.isConfigured());

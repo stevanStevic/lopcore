@@ -54,11 +54,14 @@ TEST_F(BleDataFramerTest, SingleChunk_SmallPayload_ReturnsComplete)
     EXPECT_EQ(std::vector<uint8_t>(framer.payload(), framer.payload() + framer.payloadSize()), payload);
 }
 
-TEST_F(BleDataFramerTest, SingleChunk_EmptyPayload_ReturnsComplete)
+TEST_F(BleDataFramerTest, SingleChunk_EmptyPayload_Rejected)
 {
-    // A 4-byte length header with length=0 is valid (empty frame)
+    // A length header of 0 is deliberately rejected: no provisioning sender
+    // ever produces an empty frame (esp_prov frames JSON payloads, which are
+    // never zero-length), so a zero length always indicates a corrupt header.
     uint8_t frame[] = {0x00, 0x00, 0x00, 0x00};
-    EXPECT_EQ(framer.onData(frame, sizeof(frame)), FrameResult::COMPLETE);
+    EXPECT_EQ(framer.onData(frame, sizeof(frame)), FrameResult::ERROR_INVALID);
+    EXPECT_TRUE(framer.hasError());
     EXPECT_EQ(framer.payloadSize(), 0u);
 }
 

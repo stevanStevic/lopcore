@@ -1,9 +1,14 @@
 # LopCore - ESP32 C++ Middleware Framework
 # Reusable middleware for ESP32 IoT projects with AWS IoT support
 
-set(LOPCORE_VERSION_MAJOR 1)
-set(LOPCORE_VERSION_MINOR 0)
-set(LOPCORE_VERSION_PATCH 0)
+# Version single source of truth: the VERSION file.
+# idf_component.yml must carry the same value; CI enforces the match.
+file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/VERSION" LOPCORE_VERSION_STRING LIMIT_COUNT 1)
+string(STRIP "${LOPCORE_VERSION_STRING}" LOPCORE_VERSION_STRING)
+string(REPLACE "." ";" LOPCORE_VERSION_LIST "${LOPCORE_VERSION_STRING}")
+list(GET LOPCORE_VERSION_LIST 0 LOPCORE_VERSION_MAJOR)
+list(GET LOPCORE_VERSION_LIST 1 LOPCORE_VERSION_MINOR)
+list(GET LOPCORE_VERSION_LIST 2 LOPCORE_VERSION_PATCH)
 
 # Component directory (works when standalone or as subcomponent)
 set(LOPCORE_DIR ${CMAKE_CURRENT_LIST_DIR})

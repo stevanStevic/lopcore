@@ -38,9 +38,9 @@ static_assert(has_typed_operations_v<NvsStorage>, "NvsStorage should have typed 
 static_assert(!requires_commit_v<SpiffsStorage>, "SpiffsStorage should NOT require commit");
 static_assert(requires_commit_v<NvsStorage>, "NvsStorage should require commit");
 
-// Format support
+// Format support (NVS exposes eraseNamespace() instead of format())
 static_assert(supports_format_v<SpiffsStorage>, "SpiffsStorage should support format");
-static_assert(supports_format_v<NvsStorage>, "NvsStorage should support format");
+static_assert(!supports_format_v<NvsStorage>, "NvsStorage should NOT support format");
 
 // String operations
 static_assert(supports_strings_v<SpiffsStorage>, "SpiffsStorage should support strings");
@@ -68,7 +68,7 @@ TEST(StorageTraitsTest, NvsTraits)
     EXPECT_TRUE(is_key_value_v<NvsStorage>);
     EXPECT_TRUE(has_typed_operations_v<NvsStorage>);
     EXPECT_TRUE(requires_commit_v<NvsStorage>);
-    EXPECT_TRUE(supports_format_v<NvsStorage>);
+    EXPECT_FALSE(supports_format_v<NvsStorage>);
     EXPECT_TRUE(supports_strings_v<NvsStorage>);
 }
 
@@ -91,20 +91,26 @@ public:
 
     bool saveConfig(const std::string &key, const std::string &value)
     {
-        auto result = storage_.writeString(key, value);
+        bool result = storage_.write(key, value);
 
         // Commit if storage requires it (NVS only)
         if constexpr (requires_commit_v<Storage>)
         {
-            return result == ESP_OK && storage_.commit() == ESP_OK;
+            return result && storage_.commit();
         }
 
-        return result == ESP_OK;
+        return result;
     }
 
     bool loadConfig(const std::string &key, std::string &value)
     {
-        return storage_.readString(key, value) == ESP_OK;
+        auto result = storage_.read(key);
+        if (!result.has_value())
+        {
+            return false;
+        }
+        value = *result;
+        return true;
     }
 
 private:
@@ -114,7 +120,9 @@ private:
 TEST(StorageTraitsTest, GenericAlgorithmWithSpiffs)
 {
     // Generic algorithm works with SPIFFS
-    SpiffsStorage spiffs;
+    SpiffsConfig config;
+    config.setBasePath("/tmp/lopcore_traits_spiffs");
+    SpiffsStorage spiffs(config);
     TestConfigManager<SpiffsStorage> manager(spiffs);
 
     // Note: This test just verifies compilation
@@ -124,7 +132,9 @@ TEST(StorageTraitsTest, GenericAlgorithmWithSpiffs)
 TEST(StorageTraitsTest, GenericAlgorithmWithNvs)
 {
     // Same generic algorithm works with NVS
-    NvsStorage nvs;
+    NvsConfig config;
+    config.setNamespace("traits_test");
+    NvsStorage nvs(config);
     TestConfigManager<NvsStorage> manager(nvs);
 
     // Note: This test just verifies compilation
@@ -197,18 +207,6 @@ TEST(StorageConstructionTest, NvsWithConfig)
     NvsStorage storage(config);
 
     // Note: Actual initialization tested in integration tests
-}
-
-TEST(StorageConstructionTest, SpiffsDeprecatedConstructor)
-{
-    // Old constructor still works (but deprecated)
-    // Suppress deprecation warnings for this test
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-    SpiffsStorage storage("/test");
-#pragma GCC diagnostic pop
-
-    // Should still compile
 }
 
 TEST(StorageConstructionTest, NvsDeprecatedConstructor)

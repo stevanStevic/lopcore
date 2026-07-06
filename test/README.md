@@ -24,15 +24,15 @@ components/lopcore/test/
 ├── CMakeLists.txt           # Google Test configuration
 ├── README.md                # This file
 ├── unit/                    # Unit tests (Google Test)
-│   ├── test_dummy.cpp       # Dummy test to verify setup
 │   ├── test_logger.cpp      # Logger tests
 │   ├── test_file_sink.cpp   # File sink tests
-│   ├── test_storage_factory.cpp  # Storage tests
+│   ├── test_nvs_storage.cpp # Storage tests (plus test_spiffs_storage.cpp, storage/)
 │   ├── mqtt/                # MQTT component tests
 │   │   ├── test_mqtt_types.cpp
-│   │   ├── test_mqtt_budget.cpp
-│   │   ├── test_mqtt_operations.cpp
+│   │   ├── test_mqtt_config.cpp
+│   │   ├── test_mqtt_traits.cpp
 │   │   └── ...
+│   ├── prov/                # Provisioning component tests
 │   └── tls/                 # TLS component tests
 │       └── test_mock_tls_transport.cpp
 └── mocks/                   # Mock headers for host testing
@@ -50,7 +50,7 @@ components/lopcore/test/
 ### Prerequisites
 
 -   CMake 3.16+
--   C++17 compiler (g++ or clang++)
+-   C++20 compiler (g++ or clang++)
 -   Internet connection (first build downloads Google Test)
 
 ### Building and Running
@@ -66,7 +66,7 @@ ctest --verbose
 
 # Or run specific test
 ./test_logger
-./test_mqtt_operations
+./test_mqtt_config
 ```
 
 ### Test Coverage Goals
@@ -108,75 +108,13 @@ For ESP-IDF APIs that cannot run on host:
 2. Provide minimal implementation for compilation
 3. Use dependency injection in production code to enable testing
 
-## Hardware Tests (Python)
-
-### Prerequisites
-
-```bash
-# Install dependencies
-pip3 install pyserial pytest
-
-# For BLE tests (Week 5-6)
-pip3 install bleak
-
-# For HTTP tests
-pip3 install requests
-```
-
-### Running Hardware Tests
-
-```bash
-# From scripts/hardware_tests/ directory
-
-# Test device connection
-python3 test_template.py --port /dev/ttyUSB0 --test dummy
-
-# Run specific component test
-python3 test_logging.py --port /dev/ttyUSB0
-
-# Run all hardware tests (Week 12)
-pytest test_*.py --port /dev/ttyUSB0 -v
-```
-
-### Writing Hardware Tests
-
-Example test structure:
-
-```python
-from test_template import HardwareTestBase
-
-class LoggingTest(HardwareTestBase):
-    """Test logging functionality"""
-
-    def run(self) -> bool:
-        # Trigger a log action
-        self.send_command("test_log")
-
-        # Wait for expected log output
-        if not self.wait_for_log("TEST_LOG", timeout=5.0):
-            return False
-
-        self.logger.info("Logging test passed")
-        return True
-
-# Usage
-test = LoggingTest(port="/dev/ttyUSB0")
-test.execute()
-```
-
 ## Continuous Integration
 
 ### Pre-commit Checks
 
 ```bash
-# Run before committing
-./scripts/run_tests.sh
-
-# This will:
-# 1. Build unit tests
-# 2. Run all unit tests
-# 3. Generate coverage report
-# 4. Check for 80%+ coverage
+# Run before committing (from components/lopcore/test/build/)
+cmake .. && make -j$(nproc) && ctest --output-on-failure
 ```
 
 ### CI Pipeline (Future)
@@ -199,14 +137,4 @@ gdb ./test_logger
 
 # Verbose output
 ./test_logger --gtest_filter=LoggerTest.* --gtest_verbose
-```
-
-### Hardware Tests
-
-```bash
-# Enable debug logging
-python3 test_logging.py --port /dev/ttyUSB0 --log-level DEBUG
-
-# Monitor serial output separately
-screen /dev/ttyUSB0 115200
 ```

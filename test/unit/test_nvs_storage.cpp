@@ -17,7 +17,9 @@ protected:
 
     void SetUp() override
     {
-        storage = std::make_unique<NvsStorage>("test_namespace");
+        lopcore::storage::NvsConfig config;
+        config.setNamespace("test_namespace");
+        storage = std::make_unique<NvsStorage>(config);
         // Initialize the storage
         ASSERT_TRUE(storage->initialize()) << "Failed to initialize NVS storage";
     }

@@ -11,6 +11,8 @@
 
 #include "lopcore/storage/nvs_storage.hpp"
 
+#include <cstring>
+
 #include "lopcore/logging/logger.hpp"
 
 #ifndef ESP_PLATFORM

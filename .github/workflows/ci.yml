@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host-tests:
+    name: Host unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # Host tests stub all ESP-IDF and AWS SDK headers (test/mocks), so no
+      # submodules and no ESP-IDF install are needed here.
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Configure
+        run: cmake -S test -B build -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        run: cmake --build build -j "$(nproc)"
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  version-consistency:
+    name: Version consistency
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      # The VERSION file is the single source of truth (CMake parses it).
+      # idf_component.yml cannot read a file, so it carries a copy - keep them equal.
+      - name: VERSION matches idf_component.yml
+        run: |
+          ver_file="$(head -1 VERSION | tr -d '[:space:]')"
+          ver_manifest="$(sed -n 's/^version: *"\(.*\)".*/\1/p' idf_component.yml | head -1)"
+          echo "VERSION=$ver_file idf_component.yml=$ver_manifest"
+          test "$ver_file" = "$ver_manifest"

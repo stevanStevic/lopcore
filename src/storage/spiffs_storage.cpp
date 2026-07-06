@@ -85,6 +85,7 @@ bool SpiffsStorage::initialize()
         ESP_LOGI(TAG, "Partition size: total=%zu, used=%zu", total, used);
     }
 
+    initialized_ = true;
     return true;
 #else
     // Host: Just check/create directory
@@ -98,6 +99,7 @@ bool SpiffsStorage::initialize()
             return false;
         }
     }
+    initialized_ = true;
     return true;
 #endif
 }

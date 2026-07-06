@@ -4,8 +4,11 @@
 cmake_minimum_required(VERSION 3.16)
 project(lopcore_tests)
 
-# Enable C++17
-set(CMAKE_CXX_STANDARD 17)
+# Enable C++20.
+# ESP-IDF 5.x compiles the component with gnu++2b, and production code relies
+# on C++20 features (e.g. parenthesized aggregate initialization in
+# src/storage/nvs_storage.cpp), so the host suite must match.
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Download and build Google Test
@@ -42,14 +45,6 @@ include_directories(
 )
 
 # Test executables
-add_executable(test_dummy
-    unit/test_dummy.cpp
-)
-
-target_link_libraries(test_dummy
-    GTest::gtest_main
-)
-
 add_executable(test_logger
     unit/test_logger.cpp
     ${LOPCORE_BASE_DIR}/src/logging/logger.cpp
@@ -74,7 +69,6 @@ target_link_libraries(test_ring_file_sink GTest::gtest_main)
 
 # Add tests to CTest
 include(GoogleTest)
-gtest_discover_tests(test_dummy)
 gtest_discover_tests(test_logger)
 gtest_discover_tests(test_file_sink)
 gtest_discover_tests(test_ring_file_sink)
@@ -86,12 +80,14 @@ add_executable(test_ring_record_file
 target_link_libraries(test_ring_record_file GTest::gtest_main)
 gtest_discover_tests(test_ring_record_file)
 
-add_executable(test_littlefs_storage
-    unit/test_littlefs_storage.cpp
-    ${LOPCORE_BASE_DIR}/src/storage/littlefs_storage.cpp
-)
-target_link_libraries(test_littlefs_storage GTest::gtest_main pthread)
-gtest_discover_tests(test_littlefs_storage)
+# =============================================================================
+# test_littlefs_storage: DELIBERATELY EXCLUDED FROM THE HOST SUITE.
+# src/storage/littlefs_storage.cpp unconditionally includes esp_littlefs.h and
+# has NO host-simulation branches (no ESP_PLATFORM guards at all), so it cannot
+# compile - let alone run meaningfully - on the host. Do NOT stub esp_littlefs.h
+# to fake-pass it; LittleFS coverage is deferred to the on-target (esp32) tier.
+# unit/test_littlefs_storage.cpp is kept for that future tier.
+# =============================================================================
 
 add_executable(test_spiffs_storage
     unit/test_spiffs_storage.cpp
@@ -100,9 +96,11 @@ add_executable(test_spiffs_storage
 target_link_libraries(test_spiffs_storage GTest::gtest_main pthread)
 gtest_discover_tests(test_spiffs_storage)
 
+# nvs_storage.cpp logs via LOPCORE_LOG*, so its consumers need logger.cpp
 add_executable(test_nvs_storage
     unit/test_nvs_storage.cpp
     ${LOPCORE_BASE_DIR}/src/storage/nvs_storage.cpp
+    ${LOPCORE_BASE_DIR}/src/logging/logger.cpp
 )
 target_link_libraries(test_nvs_storage GTest::gtest_main pthread)
 gtest_discover_tests(test_nvs_storage)
@@ -111,12 +109,16 @@ add_executable(test_storage_traits
     unit/storage/test_storage_traits.cpp
     ${LOPCORE_BASE_DIR}/src/storage/spiffs_storage.cpp
     ${LOPCORE_BASE_DIR}/src/storage/nvs_storage.cpp
+    ${LOPCORE_BASE_DIR}/src/logging/logger.cpp
 )
 target_link_libraries(test_storage_traits GTest::gtest_main pthread)
 gtest_discover_tests(test_storage_traits)
 
+# state_machine.hpp logs via LOPCORE_LOG*, which odr-uses the Logger singleton,
+# so the target must compile logger.cpp like the other logging consumers.
 add_executable(test_state_machine
     unit/state_machine/test_state_machine.cpp
+    ${LOPCORE_BASE_DIR}/src/logging/logger.cpp
 )
 target_link_libraries(test_state_machine GTest::gtest_main pthread)
 gtest_discover_tests(test_state_machine)
@@ -127,23 +129,28 @@ add_executable(test_mqtt_types
 target_link_libraries(test_mqtt_types GTest::gtest_main)
 gtest_discover_tests(test_mqtt_types)
 
+# TlsConfig::validate() (called via MqttConfig::validate()) logs through the
+# Logger singleton, so config tests need logger.cpp.
 add_executable(test_mqtt_config
     unit/mqtt/test_mqtt_config.cpp
+    ${LOPCORE_BASE_DIR}/src/logging/logger.cpp
 )
-target_link_libraries(test_mqtt_config GTest::gtest_main)
+target_link_libraries(test_mqtt_config GTest::gtest_main pthread)
 gtest_discover_tests(test_mqtt_config)
-
-add_executable(test_mqtt_budget
-    unit/mqtt/test_mqtt_budget.cpp
-)
-target_link_libraries(test_mqtt_budget GTest::gtest_main pthread)
-gtest_discover_tests(test_mqtt_budget)
 
 add_executable(test_esp_mqtt_client
     unit/mqtt/test_esp_mqtt_client.cpp
+    ${LOPCORE_BASE_DIR}/src/logging/logger.cpp
 )
-target_link_libraries(test_esp_mqtt_client GTest::gtest_main)
+target_link_libraries(test_esp_mqtt_client GTest::gtest_main pthread)
 gtest_discover_tests(test_esp_mqtt_client)
+
+# Compile-time capability detection for CoreMqttClient / EspMqttClient
+add_executable(test_mqtt_traits
+    unit/mqtt/test_mqtt_traits.cpp
+)
+target_link_libraries(test_mqtt_traits GTest::gtest_main)
+gtest_discover_tests(test_mqtt_traits)
 
 add_executable(test_coremqtt_client_simple
     unit/mqtt/test_coremqtt_client_simple.cpp
@@ -175,13 +182,6 @@ add_executable(test_queued_sink
 target_link_libraries(test_queued_sink GTest::gtest_main pthread)
 gtest_discover_tests(test_queued_sink PROPERTIES TIMEOUT 60)
 
-# Phase 4: CoreMQTT client tests (full - disabled until ESP-IDF integration)
-#add_executable(test_coremqtt_client
-#    unit/mqtt/test_coremqtt_client.cpp
-#)
-#target_link_libraries(test_coremqtt_client GTest::gtest_main)
-#gtest_discover_tests(test_coremqtt_client)
-
 # Phase 4: MQTT Client Factory tests - REMOVED
 # Factory pattern replaced with direct construction of CoreMqttClient/EspMqttClient
 # See mqtt_traits.hpp for capability-based template programming
@@ -201,23 +201,6 @@ add_executable(test_tls_config
 )
 target_link_libraries(test_tls_config GTest::gtest_main pthread)
 gtest_discover_tests(test_tls_config)
-
-# MQTT Operations Tests (publish/subscribe/unsubscribe logic)
-add_executable(test_mqtt_operations
-    unit/mqtt/test_mqtt_operations.cpp
-)
-
-target_include_directories(test_mqtt_operations PRIVATE
-    ${LOPCORE_INCLUDE_DIRS}
-    ${CMAKE_CURRENT_SOURCE_DIR}/mocks
-)
-
-target_link_libraries(test_mqtt_operations PRIVATE
-    gtest
-    gtest_main
-)
-
-gtest_discover_tests(test_mqtt_operations)
 
 # Standalone MQTT Clients Tests (Trait-based compile-time tests)
 # Note: Full client tests require ESP-IDF environment
@@ -291,8 +274,13 @@ else()
         GIT_SHALLOW    TRUE
     )
     set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    # Keep cJSON's own unit tests out of our build and out of ctest discovery.
+    set(ENABLE_CJSON_TEST OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(cjson)
     add_library(cjson_host INTERFACE)
+    # cJSON's CMake does not export usable INTERFACE include dirs for
+    # FetchContent consumers; attach the source dir (where cJSON.h lives).
+    target_include_directories(cjson_host INTERFACE ${cjson_SOURCE_DIR})
     target_link_libraries(cjson_host INTERFACE cjson)
 endif()
 

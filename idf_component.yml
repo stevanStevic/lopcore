@@ -1,7 +1,7 @@
 ## IDF Component Manager Manifest File
 ## This file describes the LopCore component and its dependencies
 
-version: "1.0.0"
+version: "1.1.0"
 description: "Modern C++17 middleware framework for ESP32 IoT applications with AWS IoT support"
 url: "https://github.com/stevanStevic/lopcore"
 repository: "https://github.com/stevanStevic/lopcore.git"
@@ -57,6 +57,6 @@ files:
         - "dist/"
         - ".vscode/"
         - ".devcontainer/"
-        - "test/build/" # Exclude test build artifacts but keep test sources
+        - "test/" # Tests are not part of the distributed component (matches the release tarball)
         - ".git"
         - ".github"

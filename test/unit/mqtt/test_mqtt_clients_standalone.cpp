@@ -137,11 +137,9 @@ TEST_F(MqttClientStandaloneTest, Traits_CoreMqttClient_IsMqttClient)
 
 TEST_F(MqttClientStandaloneTest, Traits_EspMqttClient_IsMqttClient)
 {
-    // EspMqttClient satisfies basic MQTT client interface
-    // Note: May not match all trait requirements depending on implementation
-    bool isMqttClient = is_mqtt_client_v<EspMqttClient>;
-    // Document actual state - trait detection based on method signatures
-    EXPECT_FALSE(isMqttClient); // Current implementation doesn't match trait exactly
+    // EspMqttClient satisfies the basic MQTT client interface
+    // (connect/disconnect/publish/subscribe/isConnected)
+    EXPECT_TRUE(is_mqtt_client_v<EspMqttClient>);
 }
 
 TEST_F(MqttClientStandaloneTest, Traits_CoreMqttClient_CompositeTraits)
@@ -149,24 +147,13 @@ TEST_F(MqttClientStandaloneTest, Traits_CoreMqttClient_CompositeTraits)
     // CoreMqttClient supports both sync and async patterns
     EXPECT_TRUE(is_synchronous_capable_v<CoreMqttClient>);
     EXPECT_TRUE(is_asynchronous_capable_v<CoreMqttClient>);
-
-    // Production ready check depends on all features
-    bool isReady = is_production_ready_v<CoreMqttClient>;
-    EXPECT_FALSE(isReady); // May be missing some features like budget management
 }
 
 TEST_F(MqttClientStandaloneTest, Traits_EspMqttClient_CompositeTraits)
 {
     // EspMqttClient is async-only
     EXPECT_FALSE(is_synchronous_capable_v<EspMqttClient>); // No manual processing
-
-    // Async capable depends on callback setters matching trait signature
-    bool asyncCapable = is_asynchronous_capable_v<EspMqttClient>;
-    EXPECT_FALSE(asyncCapable); // May not match trait signature exactly
-
-    // Production ready check depends on all features
-    bool isReady = is_production_ready_v<EspMqttClient>;
-    EXPECT_FALSE(isReady); // May be missing some features
+    EXPECT_TRUE(is_asynchronous_capable_v<EspMqttClient>); // Callback-based operation
 }
 
 TEST_F(MqttClientStandaloneTest, Traits_CoreMqttClient_Statistics)
@@ -185,10 +172,10 @@ TEST_F(MqttClientStandaloneTest, Traits_CoreMqttClient_QoS2)
     EXPECT_TRUE(supports_qos2_v<CoreMqttClient>);
 }
 
-TEST_F(MqttClientStandaloneTest, Traits_EspMqttClient_NoQoS2)
+TEST_F(MqttClientStandaloneTest, Traits_EspMqttClient_QoS2)
 {
-    // ESP-MQTT has limited QoS 2 support
-    EXPECT_FALSE(supports_qos2_v<EspMqttClient>);
+    // ESP-MQTT publish() takes the full MqttQos enum, including EXACTLY_ONCE
+    EXPECT_TRUE(supports_qos2_v<EspMqttClient>);
 }
 
 // =============================================================================

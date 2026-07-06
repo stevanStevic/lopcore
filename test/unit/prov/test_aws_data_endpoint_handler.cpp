@@ -64,12 +64,14 @@ protected:
     void SetUp() override
     {
         auto mem = makeMemoryStorage(store);
-        // All 5 fields go to the same in-memory store
+        // All 5 fields go to the same in-memory store. Keys must match the
+        // handler's storage keys (NVS-safe, <= 15 chars): the JSON field
+        // "provisioning_template" is stored under "prov_template".
         cfg.storageMap["claim_cert"] = mem;
         cfg.storageMap["claim_key"] = mem;
         cfg.storageMap["root_ca"] = mem;
         cfg.storageMap["aws_endpoint"] = mem;
-        cfg.storageMap["provisioning_template"] = mem;
+        cfg.storageMap["prov_template"] = mem;
 
         handler = std::make_unique<AwsDataEndpointHandler>(cfg);
     }
@@ -107,13 +109,15 @@ TEST_F(AwsDataEndpointHandlerTest, ValidJson_Response_ContainsSuccess)
 
 TEST_F(AwsDataEndpointHandlerTest, ValidJson_StoresAllFieldsToStorage)
 {
-    feed(makeValidJson("CERT_PEM", "KEY_PEM", "ROOTCA_PEM", "ep.example.com", "TemplateName"));
+    // PEM fields must pass the handler's "-----BEGIN" validation
+    EXPECT_TRUE(feed(makeValidJson("-----BEGIN CERT_PEM", "-----BEGIN KEY_PEM", "-----BEGIN ROOTCA_PEM",
+                                   "ep.example.com", "TemplateName")));
 
     EXPECT_EQ(store["aws_endpoint"], "ep.example.com");
-    EXPECT_EQ(store["provisioning_template"], "TemplateName");
-    EXPECT_EQ(store["claim_cert"], "CERT_PEM");
-    EXPECT_EQ(store["claim_key"], "KEY_PEM");
-    EXPECT_EQ(store["root_ca"], "ROOTCA_PEM");
+    EXPECT_EQ(store["prov_template"], "TemplateName");
+    EXPECT_EQ(store["claim_cert"], "-----BEGIN CERT_PEM");
+    EXPECT_EQ(store["claim_key"], "-----BEGIN KEY_PEM");
+    EXPECT_EQ(store["root_ca"], "-----BEGIN ROOTCA_PEM");
 }
 
 // ----------------------------------------------------------------

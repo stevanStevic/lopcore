@@ -39,6 +39,8 @@ TEST(EspMqttClientTest, ConfigurationValidation_InvalidBroker)
 TEST(EspMqttClientTest, ConfigurationWithTls)
 {
     TlsConfig tls;
+    tls.hostname = "mqtt.example.com"; // TlsConfig::validate() requires server details
+    tls.port = 8883;
     tls.caCertPath = "/certs/ca.crt";
     tls.clientCertLabel = "device_cert";
     tls.clientKeyLabel = "device_key";
@@ -185,9 +187,15 @@ TEST(EspMqttClientTest, ConfigurationWithSubConfigs)
     config.port = 8883;
     config.clientId = "test-client";
 
-    // TLS configuration
-    config.tls.caCertPath = "/certs/ca.crt";
-    config.tls.verifyPeer = true;
+    // TLS configuration (MqttConfig::tls is std::optional - presence == enabled)
+    TlsConfig tls;
+    tls.hostname = "mqtt.example.com";
+    tls.port = 8883;
+    tls.caCertPath = "/certs/ca.crt";
+    tls.clientCertLabel = "device_cert";
+    tls.clientKeyLabel = "device_key";
+    tls.verifyPeer = true;
+    config.tls = tls;
 
     // Budget configuration
     config.budget.enabled = true;
@@ -203,7 +211,8 @@ TEST(EspMqttClientTest, ConfigurationWithSubConfigs)
     config.will.qos = MqttQos::AT_LEAST_ONCE;
 
     EXPECT_EQ(config.validate(), ESP_OK);
-    EXPECT_EQ(config.tls.caCertPath, "/certs/ca.crt");
+    ASSERT_TRUE(config.tls.has_value());
+    EXPECT_EQ(config.tls->caCertPath, "/certs/ca.crt");
     EXPECT_TRUE(config.budget.enabled);
     EXPECT_TRUE(config.reconnect.autoReconnect);
     EXPECT_EQ(config.will.topic, "device/status");

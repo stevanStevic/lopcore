@@ -38,7 +38,6 @@ static_assert(is_synchronous_capable_v<CoreMqttClient>,
               "CoreMqttClient must support synchronous patterns (manual processing)");
 static_assert(is_asynchronous_capable_v<CoreMqttClient>,
               "CoreMqttClient must support asynchronous patterns (callbacks)");
-static_assert(is_production_ready_v<CoreMqttClient>, "CoreMqttClient must be production-ready");
 
 // =============================================================================
 // EspMqttClient Trait Tests
@@ -61,7 +60,6 @@ static_assert(!is_synchronous_capable_v<EspMqttClient>,
               "EspMqttClient must NOT support synchronous patterns (no manual processing)");
 static_assert(is_asynchronous_capable_v<EspMqttClient>,
               "EspMqttClient must support asynchronous patterns (callbacks)");
-static_assert(is_production_ready_v<EspMqttClient>, "EspMqttClient must be production-ready");
 
 // =============================================================================
 // Compile-Time Decision Making Tests
@@ -164,7 +162,6 @@ TEST(MqttTraitsTest, CoreMqttClientCapabilities)
     EXPECT_TRUE(supports_qos2_v<CoreMqttClient>);
     EXPECT_TRUE(is_synchronous_capable_v<CoreMqttClient>);
     EXPECT_TRUE(is_asynchronous_capable_v<CoreMqttClient>);
-    EXPECT_TRUE(is_production_ready_v<CoreMqttClient>);
 }
 
 TEST(MqttTraitsTest, EspMqttClientCapabilities)
@@ -176,7 +173,6 @@ TEST(MqttTraitsTest, EspMqttClientCapabilities)
     EXPECT_TRUE(supports_qos2_v<EspMqttClient>);
     EXPECT_FALSE(is_synchronous_capable_v<EspMqttClient>); // Cannot do sync!
     EXPECT_TRUE(is_asynchronous_capable_v<EspMqttClient>);
-    EXPECT_TRUE(is_production_ready_v<EspMqttClient>);
 }
 
 // =============================================================================

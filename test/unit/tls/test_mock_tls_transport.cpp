@@ -127,9 +127,10 @@ TEST_F(MockTlsTransportTest, Send_Success)
     EXPECT_EQ(bytesSent, 10);
     EXPECT_EQ(mockTransport->getSendCallCount(), 1);
 
-    auto sentData = mockTransport->getSentData();
-    ASSERT_EQ(sentData.size(), 1);
-    EXPECT_EQ(sentData[0], std::string(data, 10));
+    // getSentData() returns a flat byte buffer of everything sent
+    const auto &sentData = mockTransport->getSentData();
+    ASSERT_EQ(sentData.size(), 10u);
+    EXPECT_EQ(std::string(sentData.begin(), sentData.end()), std::string(data, 10));
 }
 
 TEST_F(MockTlsTransportTest, Send_PartialSuccess)
@@ -185,7 +186,7 @@ TEST_F(MockTlsTransportTest, Send_MultipleCalls)
 TEST_F(MockTlsTransportTest, Recv_Success)
 {
     std::vector<uint8_t> testData = {'h', 'e', 'l', 'l', 'o'};
-    mockTransport->enqueueReceiveData(ESP_OK, testData);
+    mockTransport->enqueueReceiveData(testData);
 
     char buffer[10];
     size_t bytesReceived = 0;
@@ -201,7 +202,7 @@ TEST_F(MockTlsTransportTest, Recv_Success)
 TEST_F(MockTlsTransportTest, Recv_PartialData)
 {
     std::vector<uint8_t> testData = {'a', 'b', 'c'};
-    mockTransport->enqueueReceiveData(ESP_OK, testData);
+    mockTransport->enqueueReceiveData(testData);
 
     char buffer[10];
     size_t bytesReceived = 0;
@@ -215,7 +216,7 @@ TEST_F(MockTlsTransportTest, Recv_PartialData)
 
 TEST_F(MockTlsTransportTest, Recv_Failure)
 {
-    mockTransport->enqueueReceiveData(ESP_FAIL, {});
+    mockTransport->enqueueReceiveResult(ESP_FAIL, 0);
 
     char buffer[10];
     size_t bytesReceived = 0;
@@ -228,9 +229,9 @@ TEST_F(MockTlsTransportTest, Recv_Failure)
 
 TEST_F(MockTlsTransportTest, Recv_MultipleCalls)
 {
-    mockTransport->enqueueReceiveData(ESP_OK, {'1', '2', '3'});
-    mockTransport->enqueueReceiveData(ESP_OK, {'a', 'b'});
-    mockTransport->enqueueReceiveData(ESP_FAIL, {});
+    mockTransport->enqueueReceiveData(std::vector<uint8_t>{'1', '2', '3'});
+    mockTransport->enqueueReceiveData(std::vector<uint8_t>{'a', 'b'});
+    mockTransport->enqueueReceiveResult(ESP_FAIL, 0);
 
     char buffer[10];
     size_t bytesReceived = 0;
@@ -275,7 +276,7 @@ TEST_F(MockTlsTransportTest, Reset_ClearsAllState)
     // Set up some state
     mockTransport->setConnectResult(ESP_OK);
     mockTransport->enqueueSendResult(ESP_OK, 10);
-    mockTransport->enqueueReceiveData(ESP_OK, {'t', 'e', 's', 't'});
+    mockTransport->enqueueReceiveData(std::vector<uint8_t>{'t', 'e', 's', 't'});
 
     TlsConfig config{};
     mockTransport->connect(config);
@@ -313,10 +314,10 @@ TEST_F(MockTlsTransportTest, GetSentData_TracksAllData)
     mockTransport->send("hello", 5, &bytes);
     mockTransport->send("world!", 6, &bytes);
 
-    auto sentData = mockTransport->getSentData();
-    ASSERT_EQ(sentData.size(), 2);
-    EXPECT_EQ(sentData[0], std::string("hello"));
-    EXPECT_EQ(sentData[1], std::string("world!"));
+    // getSentData() returns a flat byte buffer of everything sent, in order
+    const auto &sentData = mockTransport->getSentData();
+    ASSERT_EQ(sentData.size(), 11u);
+    EXPECT_EQ(std::string(sentData.begin(), sentData.end()), "helloworld!");
 }
 
 TEST_F(MockTlsTransportTest, GetSentData_EmptyWhenNoSends)

@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -74,35 +75,64 @@ public:
     }
 
     /**
+     * @brief Records kept from sequence number `firstSeq` on, oldest-first.
+     *
+     * A record's sequence number is its 0-based position among every record
+     * appended since the last clear(), overwritten ones included.
+     */
+    struct Slice
+    {
+        uint64_t       firstSeq;
+        std::vector<T> records;
+    };
+
+    /**
+     * @brief Records with sequence number `seq` or later, in one locked read.
+     *
+     * Compare `firstSeq` with `seq`: equal when nothing was lost, greater when
+     * the ring overwrote `firstSeq - seq` of them first, smaller when the log
+     * holds fewer than `seq` records (cleared or recreated since `seq` was
+     * taken). A caller that tracks what it sent keeps `firstSeq +
+     * records.size()` as its next `seq`.
+     *
+     * Sequence numbers restart at 0 after clear() or when the file is
+     * recreated, so `firstSeq < seq` only detects a restart while fewer than
+     * `seq` records were appended since. A caller whose cursor must survive
+     * either has to reset it on that event itself.
+     */
+    Slice readFrom(uint64_t seq) const
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        const uint64_t total  = storage_.writePos() / sizeof(T);
+        const uint64_t oldest = (total > max_entries_) ? total - max_entries_ : 0u;
+
+        Slice out{seq < oldest ? oldest : (seq > total ? total : seq), {}};
+        const size_t count = static_cast<size_t>(total - out.firstSeq);
+        if (count == 0)
+        {
+            return out;
+        }
+
+        // The kept records are contiguous in the body except across the wrap,
+        // so at most two reads (each one opens the file).
+        out.records.resize(count);
+        const size_t startSlot = static_cast<size_t>(out.firstSeq % max_entries_);
+        const size_t firstRun  = std::min(count, static_cast<size_t>(max_entries_) - startSlot);
+        storage_.readBytes(startSlot * sizeof(T), out.records.data(), firstRun * sizeof(T));
+        if (firstRun < count)
+        {
+            storage_.readBytes(0, out.records.data() + firstRun, (count - firstRun) * sizeof(T));
+        }
+        return out;
+    }
+
+    /**
      * @brief Return all valid records oldest-first.
      */
     std::vector<T> readAll() const
     {
-        std::lock_guard<std::mutex> lock(mutex_);
-
-        const uint64_t totalRecords = storage_.writePos() / sizeof(T);
-        const uint32_t count =
-            (totalRecords < max_entries_) ? static_cast<uint32_t>(totalRecords) : max_entries_;
-        if (count == 0)
-        {
-            return {};
-        }
-
-        std::vector<T> out;
-        out.reserve(count);
-
-        const uint32_t startSlot =
-            (totalRecords < max_entries_) ? 0u : static_cast<uint32_t>(totalRecords % max_entries_);
-
-        for (uint32_t i = 0; i < count; ++i)
-        {
-            const uint32_t slot       = (startSlot + i) % max_entries_;
-            const size_t   bodyOffset = static_cast<size_t>(slot) * sizeof(T);
-            T              e{};
-            storage_.readBytes(bodyOffset, &e, sizeof(T));
-            out.push_back(e);
-        }
-        return out;
+        return readFrom(0).records;
     }
 
     /**

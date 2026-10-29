@@ -17,6 +17,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 -   `lopcore_testing` component (fakes of public seams) and on-target test apps
 -   Per-tag log level filtering
 
+## [1.2.0] - 2026-10-29
+
+### Added
+
+-   `RingRecordFile<T>::readFrom(seq)`: every record gets a sequence number
+    (its position among all records appended since the last `clear()`), so a caller can send
+    only what is new and tell from the returned `firstSeq` how many records the ring overwrote
+    first, or that the log restarted
+-   `CoreMqttClient::publishConfirmed()`: QoS 1 publish that returns once the broker's PUBACK
+    for that packet arrives (or times out), for callers that track what was delivered
+
+### Changed
+
+-   `RingRecordFile<T>::readAll()` is now `readFrom(0).records` (same result), and reads the ring in
+    at most two file reads instead of one per record
+-   Host coreMQTT mock: packet ids start at 1 like the real library, and tests can inject PUBACKs
+
 ## [1.1.0] - 2026-07-06
 
 Backfilled release covering all development since the initial import. Consumers previously

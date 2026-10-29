@@ -174,6 +174,16 @@ add_executable(test_coremqtt_client_reentrancy
 target_link_libraries(test_coremqtt_client_reentrancy GTest::gtest_main pthread)
 gtest_discover_tests(test_coremqtt_client_reentrancy PROPERTIES TIMEOUT 60)
 
+# publishConfirmed(): QoS 1 publish that waits for its own PUBACK.
+add_executable(test_coremqtt_client_publish_confirmed
+    unit/mqtt/test_coremqtt_client_publish_confirmed.cpp
+    ${LOPCORE_BASE_DIR}/src/mqtt/coremqtt_client.cpp
+    ${LOPCORE_BASE_DIR}/src/mqtt/mqtt_budget.cpp
+    ${LOPCORE_BASE_DIR}/src/logging/logger.cpp
+)
+target_link_libraries(test_coremqtt_client_publish_confirmed GTest::gtest_main pthread)
+gtest_discover_tests(test_coremqtt_client_publish_confirmed PROPERTIES TIMEOUT 60)
+
 # Asynchronous (queued) log sink decorator
 add_executable(test_queued_sink
     unit/test_queued_sink.cpp

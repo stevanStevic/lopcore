@@ -167,6 +167,28 @@ public:
                             MqttQos qos = MqttQos::AT_MOST_ONCE,
                             bool retain = false);
 
+    /**
+     * @brief Publish at QoS 1 and wait for the broker's PUBACK for this packet
+     *
+     * For a caller that only counts a message as sent once the broker has it,
+     * such as one that tracks a send cursor. While waiting it pumps
+     * processLoop() itself only when no background ProcessLoop task is alive,
+     * so message callbacks then run on the calling thread. timeoutMs is not a
+     * hard limit: each check waits for the client mutex, which a running
+     * processLoop() or connect() holds for its own timeout. A reconnect while
+     * waiting returns ESP_ERR_INVALID_STATE even when a resumed session later
+     * delivers the packet, so a cursor resends it (at-least-once).
+     *
+     * @return ESP_OK once this packet's PUBACK arrived; ESP_ERR_TIMEOUT when none
+     *         came within timeoutMs (the broker may still get the packet later,
+     *         so a cursor must treat it as unsent); ESP_ERR_INVALID_STATE when not
+     *         connected, the connection dropped or was re-established while
+     *         waiting, it was called from
+     *         a message callback, or another publishConfirmed() is waiting;
+     *         otherwise publish()'s error.
+     */
+    esp_err_t publishConfirmed(const std::string &topic, const std::vector<uint8_t> &payload, uint32_t timeoutMs);
+
     esp_err_t subscribe(const std::string &topic,
                         MessageCallback callback,
                         MqttQos qos = MqttQos::AT_MOST_ONCE);
@@ -340,6 +362,15 @@ private:
                               MQTTDeserializedInfo_t *pDeserializedInfo);
 
     /**
+     * @brief publish() that also reports the packet id (MQTT_PACKET_ID_INVALID at QoS 0)
+     */
+    esp_err_t publishWithPacketId(const std::string &topic,
+                                  const std::vector<uint8_t> &payload,
+                                  MqttQos qos,
+                                  bool retain,
+                                  uint16_t &packetId);
+
+    /**
      * @brief Handle incoming events (called from eventCallback)
      */
     void handleEvent(MQTTPacketInfo_t *pPacketInfo, MQTTDeserializedInfo_t *pDeserializedInfo);
@@ -400,8 +431,18 @@ private:
     mutable std::recursive_mutex mutex_; ///< Thread safety (recursive: subscription callbacks fired from
                                          ///< processLoop() may re-enter publish()/subscribe()/unsubscribe())
     bool inProcessLoop_ = false;  ///< Guarded by mutex_; rejects re-entrant processLoop() from callbacks
+    uint32_t sessionGen_ = 0; ///< Guarded by mutex_; bumped by every successful connect()
+
+    /** publishConfirmed()'s pending packet, guarded by mutex_ (id INVALID = none). */
+    struct AwaitedAck
+    {
+        uint16_t id = MQTT_PACKET_ID_INVALID;
+        uint32_t sessionGen = 0; ///< session the packet went out on
+        bool acked = false;
+    } awaited_;
     TaskHandle_t processTask_;    ///< Process loop task handle
     std::atomic<bool> shouldRun_; ///< Process loop control (atomic, no mutex needed)
+    std::atomic<bool> processTaskAlive_{false}; ///< ProcessLoop task is running its loop (cleared as it exits)
     SemaphoreHandle_t taskStoppedSemaphore_; ///< Signals when task has stopped
 };
 

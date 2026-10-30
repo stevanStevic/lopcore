@@ -237,6 +237,7 @@ esp_err_t CoreMqttClient::connect()
     }
 
     state_ = MqttConnectionState::CONNECTED;
+    ++sessionGen_;
     statistics_.reconnectCount++;
     statistics_.lastConnected = std::chrono::system_clock::now();
 
@@ -354,6 +355,16 @@ esp_err_t CoreMqttClient::publish(const std::string &topic,
                                   MqttQos qos,
                                   bool retain)
 {
+    uint16_t packetId = MQTT_PACKET_ID_INVALID;
+    return publishWithPacketId(topic, payload, qos, retain, packetId);
+}
+
+esp_err_t CoreMqttClient::publishWithPacketId(const std::string &topic,
+                                              const std::vector<uint8_t> &payload,
+                                              MqttQos qos,
+                                              bool retain,
+                                              uint16_t &packetId)
+{
     std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     if (state_ != MqttConnectionState::CONNECTED)
@@ -380,7 +391,7 @@ esp_err_t CoreMqttClient::publish(const std::string &topic,
     publishInfo.payloadLength = payload.size();
 
     // Generate packet ID for QoS > 0
-    uint16_t packetId = MQTT_PACKET_ID_INVALID;
+    packetId = MQTT_PACKET_ID_INVALID;
     if (qos != MqttQos::AT_MOST_ONCE)
     {
         packetId = MQTT_GetPacketId(&mqttContext_);
@@ -402,6 +413,72 @@ esp_err_t CoreMqttClient::publish(const std::string &topic,
                  payload.size(), packetId);
 
     return ESP_OK;
+}
+
+esp_err_t CoreMqttClient::publishConfirmed(const std::string &topic,
+                                           const std::vector<uint8_t> &payload,
+                                           uint32_t timeoutMs)
+{
+    {
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
+
+        // Holding mutex_ while inProcessLoop_ is set means this thread is inside
+        // a message callback (another thread's processLoop() would still hold
+        // mutex_), and the PUBACK could only arrive through that same call.
+        if (inProcessLoop_ || awaited_.id != MQTT_PACKET_ID_INVALID)
+        {
+            LOPCORE_LOGW(TAG, "publishConfirmed() from a message callback or while another waits - rejected");
+            return ESP_ERR_INVALID_STATE;
+        }
+
+        uint16_t packetId = MQTT_PACKET_ID_INVALID;
+        const esp_err_t err = publishWithPacketId(topic, payload, MqttQos::AT_LEAST_ONCE, false, packetId);
+        if (err != ESP_OK)
+        {
+            return err;
+        }
+        // Set before mutex_ is released, so the PUBACK cannot be handled first.
+        awaited_ = {packetId, sessionGen_, false};
+    }
+
+    const uint32_t startMs = getTimeMs();
+    esp_err_t result = ESP_ERR_TIMEOUT;
+    for (;;)
+    {
+        {
+            std::lock_guard<std::recursive_mutex> lock(mutex_);
+            if (awaited_.acked)
+            {
+                result = ESP_OK;
+                break;
+            }
+            // A new session means the packet went out on one that has ended.
+            if (!isConnected() || awaited_.sessionGen != sessionGen_)
+            {
+                result = ESP_ERR_INVALID_STATE;
+                break;
+            }
+        }
+        if (getTimeMs() - startMs >= timeoutMs)
+        {
+            break;
+        }
+        // A live ProcessLoop task handles the PUBACK (and runs the message
+        // callbacks, on its own stack); pump here only when none is running,
+        // including one that exited on a connection loss.
+        if (processTaskAlive_)
+        {
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+        else
+        {
+            (void) processLoop(10);
+        }
+    }
+
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    awaited_ = {};
+    return result;
 }
 
 esp_err_t
@@ -780,6 +857,11 @@ void CoreMqttClient::handleEvent(MQTTPacketInfo_t *pPacketInfo, MQTTDeserialized
 
             case MQTT_PACKET_TYPE_PUBACK:
                 LOPCORE_LOGD(TAG, "PUBACK received (packetId=%u)", pDeserializedInfo->packetIdentifier);
+                // A PUBACK of a new session carrying the same id belongs to another packet.
+                if (pDeserializedInfo->packetIdentifier == awaited_.id && awaited_.sessionGen == sessionGen_)
+                {
+                    awaited_.acked = true;
+                }
                 break;
 
             case MQTT_PACKET_TYPE_PUBREC:
@@ -905,6 +987,7 @@ esp_err_t CoreMqttClient::startProcessLoopTask()
     xSemaphoreTake(taskStoppedSemaphore_, 0);
 
     shouldRun_ = true;
+    processTaskAlive_ = true; // before the task can run, so it never reads as dead while alive
     BaseType_t xReturned = xTaskCreate(processLoopTaskWrapper,
                                        "coremqtt_loop", // Task name
                                        4096,            // Stack size (4KB)
@@ -917,6 +1000,7 @@ esp_err_t CoreMqttClient::startProcessLoopTask()
     {
         LOPCORE_LOGE(TAG, "Failed to create ProcessLoop task");
         processTask_ = nullptr;
+        processTaskAlive_ = false;
         return ESP_FAIL;
     }
 
@@ -967,6 +1051,7 @@ esp_err_t CoreMqttClient::stopProcessLoopTask()
         LOPCORE_LOGE(TAG, "ProcessLoop task did not stop within timeout!");
         LOPCORE_LOGW(TAG, "Force deleting ProcessLoop task");
         vTaskDelete(processTask_);
+        processTaskAlive_ = false; // the deleted task never reached its own clear
         processTask_ = nullptr;
     }
 
@@ -1057,6 +1142,10 @@ void CoreMqttClient::processLoopTask()
             connectionCallback_(false);
         }
     }
+
+    // Cleared here, not by whoever reaps the handle: a task that exited on its
+    // own leaves processTask_ set until the next disconnect().
+    processTaskAlive_ = false;
 
     // Signal that we've stopped (give semaphore before deleting ourselves)
     xSemaphoreGive(taskStoppedSemaphore_);

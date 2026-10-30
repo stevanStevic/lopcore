@@ -282,6 +282,83 @@ inline MQTTStatus_t MQTT_Unsubscribe(MQTTContext_t *pContext,
     return MQTTSuccess;
 }
 
+// ---------------------------------------------------------------------------
+// Test-injection support for PUBACKs: a QoS>0 publish records its packet id;
+// with auto-ack on, the next MQTT_ProcessLoop delivers its PUBACK. Tests can
+// also queue a PUBACK for any id.
+// ---------------------------------------------------------------------------
+
+#ifdef __cplusplus
+extern "C++" {
+#endif
+namespace MockCoreMqtt
+{
+struct AckState
+{
+    std::mutex m;
+    std::deque<uint16_t> pending;
+    bool autoAck{false};
+    uint16_t lastPacketId{0};
+};
+
+inline AckState &ackState()
+{
+    static AckState state;
+    return state;
+}
+
+inline void onPublish(uint16_t packetId)
+{
+    if (packetId == 0)
+    {
+        return; // QoS 0
+    }
+    AckState &st = ackState();
+    std::lock_guard<std::mutex> lock(st.m);
+    st.lastPacketId = packetId;
+    if (st.autoAck)
+    {
+        st.pending.push_back(packetId);
+    }
+}
+
+/** @brief Deliver a PUBACK for every later QoS>0 publish. */
+inline void setAutoPubAck(bool enable)
+{
+    AckState &st = ackState();
+    std::lock_guard<std::mutex> lock(st.m);
+    st.autoAck = enable;
+}
+
+/** @brief Queue a PUBACK for `packetId`; the next MQTT_ProcessLoop delivers it. */
+inline void enqueuePubAck(uint16_t packetId)
+{
+    AckState &st = ackState();
+    std::lock_guard<std::mutex> lock(st.m);
+    st.pending.push_back(packetId);
+}
+
+/** @brief Packet id of the newest QoS>0 publish (0 when none). */
+inline uint16_t lastPublishedPacketId()
+{
+    AckState &st = ackState();
+    std::lock_guard<std::mutex> lock(st.m);
+    return st.lastPacketId;
+}
+
+inline void resetAcks()
+{
+    AckState &st = ackState();
+    std::lock_guard<std::mutex> lock(st.m);
+    st.pending.clear();
+    st.autoAck = false;
+    st.lastPacketId = 0;
+}
+} // namespace MockCoreMqtt
+#ifdef __cplusplus
+}
+#endif
+
 /**
  * @brief Publish message (mock - always succeeds)
  */
@@ -290,13 +367,13 @@ inline MQTTStatus_t MQTT_Publish(MQTTContext_t *pContext,
                                  uint16_t packetId)
 {
     (void) pPublishInfo;
-    (void) packetId;
 
     if (!pContext)
     {
         return MQTTBadParameter;
     }
 
+    MockCoreMqtt::onPublish(packetId);
     return MQTTSuccess;
 }
 
@@ -367,6 +444,31 @@ inline MQTTStatus_t MQTT_ProcessLoop(MQTTContext_t *pContext)
         return MQTTBadParameter;
     }
 
+    {
+        MockCoreMqtt::AckState &st = MockCoreMqtt::ackState();
+        uint16_t ackId = 0;
+        {
+            std::lock_guard<std::mutex> lock(st.m);
+            if (!st.pending.empty())
+            {
+                ackId = st.pending.front();
+                st.pending.pop_front();
+            }
+        }
+        if (ackId != 0)
+        {
+            if (pContext->appCallback != nullptr)
+            {
+                MQTTPacketInfo_t packetInfo = {};
+                packetInfo.type = MQTT_PACKET_TYPE_PUBACK;
+                MQTTDeserializedInfo_t deserializedInfo = {};
+                deserializedInfo.packetIdentifier = ackId;
+                pContext->appCallback(pContext, &packetInfo, &deserializedInfo);
+            }
+            return MQTTSuccess;
+        }
+    }
+
     MockCoreMqtt::IncomingPublish incoming;
     {
         std::lock_guard<std::mutex> lock(MockCoreMqtt::incomingMutex());
@@ -425,7 +527,12 @@ inline uint16_t MQTT_GetPacketId(MQTTContext_t *pContext)
         return 0;
     }
 
-    return pContext->nextPacketId++;
+    // Like the real library: ids start at 1 and never return 0 (MQTT_PACKET_ID_INVALID).
+    if (++pContext->nextPacketId == 0)
+    {
+        ++pContext->nextPacketId;
+    }
+    return pContext->nextPacketId;
 }
 
 /**

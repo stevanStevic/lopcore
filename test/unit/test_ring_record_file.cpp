@@ -132,3 +132,81 @@ TEST_F(RingRecordFileTest, MaxEntriesAccessor)
     RingRecordFile<TestRecord> ring(test_file_, 16);
     EXPECT_EQ(16u, ring.maxEntries());
 }
+
+TEST_F(RingRecordFileTest, ReadFromReturnsRecordsFromSeq)
+{
+    RingRecordFile<TestRecord> ring(test_file_, 8);
+    for (uint32_t i = 0; i < 5; ++i)
+    {
+        ring.append(TestRecord{i, 0, 0, 0});
+    }
+    const auto slice = ring.readFrom(2);
+    EXPECT_EQ(2u, slice.firstSeq);
+    ASSERT_EQ(3u, slice.records.size());
+    EXPECT_EQ(2u, slice.records[0].a);
+    EXPECT_EQ(3u, slice.records[1].a);
+    EXPECT_EQ(4u, slice.records[2].a);
+}
+
+TEST_F(RingRecordFileTest, ReadFromCaughtUpIsEmpty)
+{
+    RingRecordFile<TestRecord> ring(test_file_, 8);
+    ring.append(TestRecord{0, 0, 0, 0});
+    ring.append(TestRecord{1, 0, 0, 0});
+    const auto slice = ring.readFrom(2);
+    EXPECT_EQ(2u, slice.firstSeq);
+    EXPECT_TRUE(slice.records.empty());
+}
+
+TEST_F(RingRecordFileTest, ReadFromOverwrittenSeqStartsAtOldestKept)
+{
+    RingRecordFile<TestRecord> ring(test_file_, 4);
+    for (uint32_t i = 0; i < 6; ++i)
+    {
+        ring.append(TestRecord{i, 0, 0, 0});
+    }
+    // Seqs 0 and 1 were overwritten: firstSeq > requested tells the caller how many were lost.
+    const auto slice = ring.readFrom(0);
+    EXPECT_EQ(2u, slice.firstSeq);
+    ASSERT_EQ(4u, slice.records.size());
+    EXPECT_EQ(2u, slice.records[0].a);
+    EXPECT_EQ(5u, slice.records[3].a);
+}
+
+TEST_F(RingRecordFileTest, ReadFromPastTheEndReportsRestart)
+{
+    RingRecordFile<TestRecord> ring(test_file_, 4);
+    ring.append(TestRecord{0, 0, 0, 0});
+    ring.append(TestRecord{1, 0, 0, 0});
+    // A cursor ahead of the log (cleared or recreated since): firstSeq < requested.
+    const auto slice = ring.readFrom(5);
+    EXPECT_EQ(2u, slice.firstSeq);
+    EXPECT_TRUE(slice.records.empty());
+}
+
+TEST_F(RingRecordFileTest, ReadFromZeroMatchesReadAll)
+{
+    RingRecordFile<TestRecord> ring(test_file_, 4);
+    for (uint32_t i = 0; i < 7; ++i)
+    {
+        ring.append(TestRecord{i, 0, 0, 0});
+    }
+    const auto all = ring.readAll();
+    const auto slice = ring.readFrom(0);
+    ASSERT_EQ(all.size(), slice.records.size());
+    for (size_t i = 0; i < all.size(); ++i)
+    {
+        EXPECT_EQ(all[i].a, slice.records[i].a);
+    }
+}
+
+TEST_F(RingRecordFileTest, ZeroCapacityOverExistingFileReadsEmpty)
+{
+    {
+        RingRecordFile<TestRecord> ring(test_file_, 4);
+        ring.append(TestRecord{1, 0, 0, 0});
+    }
+    RingRecordFile<TestRecord> ring(test_file_, 0);
+    EXPECT_TRUE(ring.readAll().empty());
+    EXPECT_TRUE(ring.readFrom(0).records.empty());
+}

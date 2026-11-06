@@ -43,7 +43,7 @@ makeValidJson(const std::string &cert = "-----BEGIN CERTIFICATE-----\nCERT\n----
               const std::string &key = "-----BEGIN EC PRIVATE KEY-----\nKEY\n-----END EC PRIVATE KEY-----\n",
               const std::string &rootCA = "-----BEGIN CERTIFICATE-----\nROOT\n-----END CERTIFICATE-----\n",
               const std::string &ep = "xyz.iot.amazonaws.com",
-              const std::string &tmpl = "GrowBorgTemplate")
+              const std::string &tmpl = "ExampleTemplate")
 {
     // Use simple string-build; real handler uses cJSON_Parse internally
     return std::string(R"({"certificate":")") + cert + R"(","private_key":")" + key + R"(","root_ca":")" +

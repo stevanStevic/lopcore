@@ -159,7 +159,7 @@ TEST_F(CertificateManagerTest, GenerateCsr_TwiceConcurrently_BothSucceed)
 TEST_F(CertificateManagerTest, GenerateKeyPairAndCsr_SoftwareMode_ReturnsCsr)
 {
     std::string csr;
-    EXPECT_TRUE(cm->generateKeyPairAndCsr("GrowBorgDevice", csr));
+    EXPECT_TRUE(cm->generateKeyPairAndCsr("ExampleDevice", csr));
     EXPECT_NE(csr.find("CERTIFICATE REQUEST"), std::string::npos);
 }
 

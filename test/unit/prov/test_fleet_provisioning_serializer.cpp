@@ -155,11 +155,11 @@ static std::vector<uint8_t> buildCborRegisterResponse(const std::string &thingNa
 
 TEST(FleetProvisioningSerializer, ParseRegisterThingResponse_ValidCbor_ExtractsThingName)
 {
-    auto payload = buildCborRegisterResponse("GrowBorg-00001");
+    auto payload = buildCborRegisterResponse("Device-00001");
     auto result = FleetProvisioningSerializer::parseRegisterThingResponse(payload);
 
     ASSERT_TRUE(result.has_value());
-    EXPECT_EQ(*result, "GrowBorg-00001");
+    EXPECT_EQ(*result, "Device-00001");
 }
 
 TEST(FleetProvisioningSerializer, ParseRegisterThingResponse_EmptyPayload_ReturnsNullopt)

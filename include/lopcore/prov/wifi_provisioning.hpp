@@ -297,7 +297,7 @@ private:
  * auto awsHandler = std::make_shared<AwsCredentialsHandler>(nvsStorage);
  *
  * WiFiProvisioningConfig config;
- * config.setServiceName("GrowBorg-123456")
+ * config.setServiceName("Device-123456")
  *       .setSecurity(ProvisioningSecurity::SECURITY_1)
  *       .setProofOfPossession("abcd1234")
  *       .setWiFiStorage(makeNvsStorage(nvsStorage))

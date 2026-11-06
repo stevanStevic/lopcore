@@ -803,7 +803,7 @@ bool CertificateManager::pkcs11StoreObject(const std::string &label,
 namespace
 {
 
-/** Signing callback context (mirrors GrowBorg pkcs11_operations.c) */
+/** Signing callback context */
 struct P11SignContext
 {
     CK_SESSION_HANDLE session;
@@ -985,7 +985,7 @@ bool CertificateManager::generateKeyPairAndCsrPkcs11_(const std::string &commonN
     fakePk.pk_info = &customInfo;
     fakePk.pk_ctx = &ecCtx;
 
-    // Set signing context (global, matches GrowBorg pattern)
+    // Set signing context (global)
     g_signCtx.session = pImpl_->p11Session;
     g_signCtx.privKey = privHandle;
 

@@ -68,8 +68,8 @@ TEST_F(WiFiProvisioningConfigTest, DefaultTransport_IsBle)
 
 TEST_F(WiFiProvisioningConfigTest, SetServiceName_Fluent_Stores)
 {
-    config.setServiceName("GrowBorg-AABBCC");
-    EXPECT_EQ(config.getServiceName(), "GrowBorg-AABBCC");
+    config.setServiceName("Device-AABBCC");
+    EXPECT_EQ(config.getServiceName(), "Device-AABBCC");
 }
 
 TEST_F(WiFiProvisioningConfigTest, SetSecurity0_Stores)
@@ -197,11 +197,11 @@ TEST_F(AwsProvisioningConfigTest, AddConfigStorage_PerKey_RoutesProperly)
     config.addConfigStorage("thing_name", cb2);
 
     config.writeConfig("aws_endpoint", "a.iot.us-east-1.amazonaws.com");
-    config.writeConfig("thing_name", "GrowBorg-001");
+    config.writeConfig("thing_name", "Device-001");
 
     // Values must be routed to their respective backends
     EXPECT_EQ(store1["aws_endpoint"], "a.iot.us-east-1.amazonaws.com");
-    EXPECT_EQ(store2["thing_name"], "GrowBorg-001");
+    EXPECT_EQ(store2["thing_name"], "Device-001");
     EXPECT_TRUE(store1.find("thing_name") == store1.end());
     EXPECT_TRUE(store2.find("aws_endpoint") == store2.end());
 }
@@ -240,8 +240,8 @@ TEST_F(AwsProvisioningConfigTest, SetRetries_Stores)
 
 TEST_F(AwsProvisioningConfigTest, SetCsrSubjectName_Stores)
 {
-    config.setCsrSubjectName("CN=GrowBorgDevice");
-    EXPECT_EQ(config.csrSubjectName(), "CN=GrowBorgDevice");
+    config.setCsrSubjectName("CN=ExampleDevice");
+    EXPECT_EQ(config.csrSubjectName(), "CN=ExampleDevice");
 }
 
 TEST_F(AwsProvisioningConfigTest, SetDeviceIdProvider_Invokable)

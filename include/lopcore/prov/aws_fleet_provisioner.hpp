@@ -117,7 +117,7 @@ struct AwsProvisioningResult
  *       .addConfigStorage("provisioning_template", makeNvsStorage(nvsStorage, "template"))
  *       .addConfigStorage("thing_name", makeNvsStorage(nvsStorage, "thing_name"))
  *       .setCertificateManager(certManager)
- *       .setCsrSubjectName("CN=GrowBorgDevice")
+ *       .setCsrSubjectName("CN=ExampleDevice")
  *       .setDeviceIdProvider([]() { return getMacAddress(); });
  *
  * // Inject MQTT client (coreMQTT, ESP-MQTT, or mock)

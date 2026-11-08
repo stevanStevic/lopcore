@@ -154,6 +154,18 @@ public:
     // =============================================================================
 
     esp_err_t connect();
+
+    /**
+     * @brief coreMQTT status of the last connect() attempt (MQTTStatus_t as int, 0 = MQTTSuccess)
+     *
+     * connect() folds every failure into one esp_err_t; this keeps the reason
+     * (a CONNACK that never came, a refused CONNECT, a transport error) for the
+     * caller's diagnostics. MQTTIllegalState when connect() was called without a
+     * connected transport; MQTTNoMemory when the CONNACK arrived but the process
+     * loop task could not be started.
+     */
+    int lastConnectStatus() const;
+
     esp_err_t disconnect();
     bool isConnected() const;
 
@@ -430,8 +442,9 @@ private:
     MqttStatistics statistics_;                                 ///< Statistics
     mutable std::recursive_mutex mutex_; ///< Thread safety (recursive: subscription callbacks fired from
                                          ///< processLoop() may re-enter publish()/subscribe()/unsubscribe())
-    bool inProcessLoop_ = false;  ///< Guarded by mutex_; rejects re-entrant processLoop() from callbacks
-    uint32_t sessionGen_ = 0; ///< Guarded by mutex_; bumped by every successful connect()
+    bool inProcessLoop_ = false; ///< Guarded by mutex_; rejects re-entrant processLoop() from callbacks
+    uint32_t sessionGen_ = 0;    ///< Guarded by mutex_; bumped by every successful connect()
+    int lastConnectStatus_ = 0;  ///< MQTTStatus_t of the last connect() attempt (lastConnectStatus())
 
     /** publishConfirmed()'s pending packet, guarded by mutex_ (id INVALID = none). */
     struct AwaitedAck

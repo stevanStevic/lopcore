@@ -61,6 +61,21 @@ TEST_F(CoreMqttClientSimpleTest, Construction_ValidConfig)
 // ProcessLoop Configuration Tests
 // =============================================================================
 
+TEST_F(CoreMqttClientSimpleTest, LastConnectStatus_SuccessBeforeAnyConnect)
+{
+    CoreMqttClient client(config, transport);
+    EXPECT_EQ(client.lastConnectStatus(), static_cast<int>(MQTTSuccess));
+}
+
+TEST_F(CoreMqttClientSimpleTest, LastConnectStatus_IllegalStateWhenTransportIsDown)
+{
+    CoreMqttClient client(config, transport);
+    transport->disconnect();
+
+    EXPECT_EQ(client.connect(), ESP_ERR_INVALID_STATE);
+    EXPECT_EQ(client.lastConnectStatus(), static_cast<int>(MQTTIllegalState));
+}
+
 TEST_F(CoreMqttClientSimpleTest, ProcessLoopDelay_DefaultValue)
 {
     CoreMqttClient client(config, transport);

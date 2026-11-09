@@ -13,6 +13,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Download and build Google Test
 include(FetchContent)
+
+# Floor for the cmake_minimum_required() of fetched third-party sources. cJSON
+# (every 1.7.x tag) declares 3.0 and mbedTLS 3.6.0 declares 3.5.1; CMake 4
+# rejects anything below 3.5 outright, so the configure died on the
+# ubuntu-26.04 runners. The floor only raises versions below it, so it does
+# not touch googletest or this project (its own minimum is above). Raise it
+# to 3.10 once CMake drops compatibility with versions below that.
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 FetchContent_Declare(
     googletest
     GIT_REPOSITORY https://github.com/google/googletest.git
@@ -261,6 +269,10 @@ else()
     )
     set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
     set(ENABLE_TESTING  OFF CACHE BOOL "" FORCE)
+    # A newer compiler's warnings inside a dependency must not fail our build:
+    # GCC 15 flags the unterminated TLS 1.3 label arrays in mbedTLS 3.6.0 and
+    # its default -Werror turned that into a compile error on the CI runners.
+    set(MBEDTLS_FATAL_WARNINGS OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(mbedtls)
     add_library(mbedtls_host INTERFACE)
     target_link_libraries(mbedtls_host INTERFACE mbedtls mbedcrypto mbedx509)

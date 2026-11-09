@@ -23,6 +23,23 @@ extern "C++" {
 #include "transport_interface.h"
 
 #ifdef __cplusplus
+extern "C++" {
+namespace MockCoreMqtt
+{
+/**
+ * The TransportInterface_t the last MQTT_Init() received. Lets a test drive the
+ * client's transport callbacks (send, recv, writev) the way coreMQTT would.
+ */
+inline TransportInterface_t &lastInitTransport()
+{
+    static TransportInterface_t iface{};
+    return iface;
+}
+} // namespace MockCoreMqtt
+}
+#endif
+
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -201,6 +218,7 @@ inline MQTTStatus_t MQTT_Init(MQTTContext_t *pContext,
     if (pContext != nullptr && pTransportInterface != nullptr && pNetworkBuffer != nullptr)
     {
         pContext->transportInterface = *pTransportInterface;
+        MockCoreMqtt::lastInitTransport() = *pTransportInterface;
         pContext->networkBuffer = *pNetworkBuffer;
         pContext->getTime = getTimeFunction;
         pContext->appCallback = userCallback;

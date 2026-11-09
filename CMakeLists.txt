@@ -83,6 +83,7 @@ set(LOPCORE_REQUIRES
     esp_event
     mqtt          # ESP-IDF native MQTT (for EspMqttClient)
     mbedtls
+    lwip          # TCP_NODELAY on the TLS socket (mbedtls_pkcs11_posix.c)
     json
     wifi_provisioning  # For BLE/WiFi provisioning
     protocomm          # Protocol communication (used by wifi_provisioning)

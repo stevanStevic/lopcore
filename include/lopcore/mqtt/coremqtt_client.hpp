@@ -358,6 +358,22 @@ private:
     static int32_t transportSend(NetworkContext_t *pNetworkContext, const void *pBuffer, size_t bytesToSend);
 
     /**
+     * @brief Static vectored send (coreMQTT callback): one packet's pieces in one write
+     *
+     * Joins whole pieces of the packet, up to MqttConfig::sendCoalesceBufferSize
+     * bytes, into sendCoalesceBuffer_ and hands them to the transport as one send,
+     * so a CONNECT or a PUBLISH leaves as one TLS record sent at once instead of one
+     * record per piece held back by Nagle. A piece the buffer cannot hold, or the
+     * last piece left, goes to the transport uncopied. Returns the bytes written;
+     * coreMQTT advances its vectors by that count and calls again for the rest.
+     * Every coreMQTT send runs under mutex_, so one staging buffer per client is
+     * enough.
+     */
+    static int32_t transportWritev(NetworkContext_t *pNetworkContext,
+                                   TransportOutVector_t *pIoVec,
+                                   size_t ioVecCount);
+
+    /**
      * @brief Static transport receive function (coreMQTT callback)
      */
     static int32_t transportRecv(NetworkContext_t *pNetworkContext, void *pBuffer, size_t bytesToRecv);
@@ -434,6 +450,7 @@ private:
     std::unique_ptr<MqttBudget> budget_;                        ///< Message budgeting
     std::atomic<MqttConnectionState> state_;                    ///< Connection state
     std::vector<uint8_t> networkBuffer_;                        ///< Network buffer
+    std::vector<uint8_t> sendCoalesceBuffer_;                   ///< transportWritev() staging, empty = off
     std::vector<MQTTPubAckInfo_t> outgoingPublishRecords_;      ///< Outgoing QoS records
     std::vector<MQTTPubAckInfo_t> incomingPublishRecords_;      ///< Incoming QoS records
     std::vector<Subscription> subscriptions_;                   ///< Active subscriptions

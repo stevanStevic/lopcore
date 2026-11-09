@@ -17,6 +17,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 -   `lopcore_testing` component (fakes of public seams) and on-target test apps
 -   Per-tag log level filtering
 
+## [1.4.0] - 2026-11-09
+
+### Added
+
+-   `MqttConfig::sendCoalesceBufferSize` (builder `sendCoalesceBufferSize()`, default 2048, 0 = off,
+    at most 4096, the TLS fragment length `MbedtlsTransport` negotiates): `CoreMqttClient` gives
+    coreMQTT a `writev`, so the pieces of one packet (fixed header, topic, packet id, payload) leave
+    as one TLS record sent at once instead of one record each. Whole pieces are joined while they
+    fit; a piece beyond the buffer, or the last one, goes to the transport uncopied.
+
+### Fixed
+
+-   MQTT uplink no longer waits on the downlink (#15). Without `writev` each piece of a packet was
+    its own TCP segment, and Nagle held every segment after the first until the previous one was
+    acknowledged: during a downlink outage a CONNECT completed only at the next lwIP retransmission,
+    and an outage longer than about 22 s during the CONNECT could not beat the 30 s CONNACK wait.
+    `MbedtlsTransport` also sets `TCP_NODELAY` on its socket now, so pieces that do not fit the
+    buffer leave at once; another `ITlsTransport` has to disable Nagle itself.
+
 ## [1.3.0] - 2026-11-08
 
 ### Added
@@ -163,5 +182,8 @@ pinned untagged commits; from this release on, every merge to develop is tagged.
 
 ---
 
+[1.4.0]: https://github.com/stevanStevic/lopcore/compare/v1.3.0...v1.4.0
+[1.3.0]: https://github.com/stevanStevic/lopcore/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/stevanStevic/lopcore/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/stevanStevic/lopcore/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/stevanStevic/lopcore/releases/tag/v1.0.0

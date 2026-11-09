@@ -167,6 +167,17 @@ public:
     uint32_t processLoopTimeoutMs{100}; ///< ProcessLoop timeout per call in milliseconds (CoreMQTT only)
     uint32_t processLoopDelayMs{10}; ///< ProcessLoop task sleep delay between calls in milliseconds (CoreMQTT
                                      ///< only)
+    /// Bytes of one outgoing packet joined into a single transport write (CoreMQTT only).
+    /// coreMQTT hands a packet to the transport in pieces (fixed header, topic, packet id,
+    /// payload). Sent one by one, each piece is its own TLS record and TCP segment, and
+    /// Nagle holds every segment after the first until the previous one is acknowledged,
+    /// so a quiet downlink stalls the uplink. Whole pieces are joined while they fit; a
+    /// piece beyond this size, or the last one, goes out on its own. 0 sends every piece
+    /// on its own. At most kSendCoalesceBufferMax: the stock MbedtlsTransport negotiates
+    /// that TLS fragment length, so a larger buffer would only be split again. That
+    /// transport also sets TCP_NODELAY; another ITlsTransport has to disable Nagle itself.
+    uint32_t sendCoalesceBufferSize{2048};
+    static constexpr uint32_t kSendCoalesceBufferMax = 4096; ///< TLS fragment length MbedtlsTransport sets
 
     std::optional<TlsConfig> tls; ///< TLS configuration (optional - if not set, transport must be injected)
     BudgetConfig budget;          ///< Budgeting configuration
@@ -212,6 +223,11 @@ public:
         if (processLoopDelayMs == 0 || processLoopDelayMs > 1000)
         {
             return ESP_ERR_INVALID_ARG; // Delay should be 1-1000ms
+        }
+
+        if (sendCoalesceBufferSize > kSendCoalesceBufferMax)
+        {
+            return ESP_ERR_INVALID_ARG; // Beyond the TLS fragment length the write is split again
         }
 
         // Validate sub-configurations
@@ -400,6 +416,20 @@ public:
     MqttConfigBuilder &networkBufferSize(uint32_t size)
     {
         config_.networkBufferSize = size;
+        return *this;
+    }
+
+    /**
+     * @brief Bytes of one outgoing packet joined into a single transport write (CoreMQTT only)
+     *
+     * @param bytes 0 sends every piece coreMQTT hands over on its own; at most kSendCoalesceBufferMax
+     * @return Reference to builder for chaining
+     *
+     * @note Default is 2048, enough for a CONNECT, a SUBSCRIBE or a PUBLISH with a small payload
+     */
+    MqttConfigBuilder &sendCoalesceBufferSize(uint32_t bytes)
+    {
+        config_.sendCoalesceBufferSize = bytes;
         return *this;
     }
 

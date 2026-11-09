@@ -179,6 +179,7 @@ esp_err_t CoreMqttClient::connect()
     if (!tlsTransport_ || !tlsTransport_->isConnected())
     {
         LOPCORE_LOGE(TAG, "TLS transport is not connected");
+        lastConnectStatus_ = static_cast<int>(MQTTIllegalState);
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -228,6 +229,7 @@ esp_err_t CoreMqttClient::connect()
     MQTTStatus_t mqttStatus = MQTT_Connect(&mqttContext_, &connectInfo,
                                            config_.will.isConfigured() ? &willInfo : nullptr,
                                            connectTimeoutMs, &sessionPresent);
+    lastConnectStatus_ = static_cast<int>(mqttStatus);
 
     if (mqttStatus != MQTTSuccess)
     {
@@ -277,6 +279,9 @@ esp_err_t CoreMqttClient::connect()
         if (err != ESP_OK)
         {
             LOPCORE_LOGE(TAG, "Failed to start ProcessLoop task");
+            // The CONNACK was fine; the failure is ours (no task). Keep that apart from
+            // MQTTSuccess for callers that store lastConnectStatus() with the error.
+            lastConnectStatus_ = static_cast<int>(MQTTNoMemory);
             return err;
         }
     }
@@ -344,6 +349,12 @@ esp_err_t CoreMqttClient::disconnect()
 bool CoreMqttClient::isConnected() const
 {
     return state_ == MqttConnectionState::CONNECTED;
+}
+
+int CoreMqttClient::lastConnectStatus() const
+{
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return lastConnectStatus_;
 }
 
 // =============================================================================

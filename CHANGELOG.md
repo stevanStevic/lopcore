@@ -17,6 +17,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 -   `lopcore_testing` component (fakes of public seams) and on-target test apps
 -   Per-tag log level filtering
 
+## [1.3.0] - 2026-11-08
+
+### Added
+
+-   `CoreMqttClient::lastConnectStatus()`: the coreMQTT status of the last `connect()` attempt
+    (`MQTTStatus_t` as `int`, 0 = success). `connect()` folds every failure into one `esp_err_t`;
+    this keeps the reason for the caller's diagnostics: a CONNACK that never came, a refused
+    CONNECT, a transport error. `MQTTIllegalState` when `connect()` ran without a connected
+    transport, `MQTTNoMemory` when the CONNACK arrived but the process-loop task could not start
+
 ## [1.2.0] - 2026-10-29
 
 ### Added

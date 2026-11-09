@@ -15,6 +15,7 @@ extern "C++" {
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <mutex>
 #include <string>
 }
@@ -34,6 +35,17 @@ inline TransportInterface_t &lastInitTransport()
 {
     static TransportInterface_t iface{};
     return iface;
+}
+
+/**
+ * Runs inside every mock MQTT_Subscribe(), on the calling thread, before it
+ * returns. Lets a test look at the client while a session restore is in
+ * progress. Empty by default; tests reset it.
+ */
+inline std::function<void()> &subscribeHook()
+{
+    static std::function<void()> hook;
+    return hook;
 }
 } // namespace MockCoreMqtt
 }
@@ -284,6 +296,10 @@ inline MQTTStatus_t MQTT_Subscribe(MQTTContext_t *pContext,
     (void) pSubscriptionList;
     (void) subscriptionCount;
     (void) packetId;
+    if (MockCoreMqtt::subscribeHook())
+    {
+        MockCoreMqtt::subscribeHook()();
+    }
     return MQTTSuccess;
 }
 

@@ -18,6 +18,7 @@
  */
 
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <string>
 #include <thread>
@@ -45,6 +46,7 @@ protected:
     void SetUp() override
     {
         MockCoreMqtt::clearIncomingPublishes();
+        MockCoreMqtt::subscribeHook() = nullptr;
 
         config = MqttConfig::builder()
                      .broker("test-broker.example.com")
@@ -64,6 +66,7 @@ protected:
     void TearDown() override
     {
         MockCoreMqtt::clearIncomingPublishes();
+        MockCoreMqtt::subscribeHook() = nullptr;
     }
 
     MqttConfig config;
@@ -248,6 +251,43 @@ TEST_F(CoreMqttClientReentrancyTest, DisconnectFromCallback_NoHang)
     EXPECT_TRUE(callbackRan);
     EXPECT_NE(result, ESP_OK); // connection is gone mid-loop
     EXPECT_FALSE(client->isConnected());
+}
+
+// The session restore after CONNACK (resubscribe, or resend of unacknowledged
+// publishes) runs under the client mutex: it calls coreMQTT, which is not
+// reentrant, and the writev path stages into one buffer per client. The
+// connection callback before it runs unlocked on purpose. The hook below runs
+// inside the mock MQTT_Subscribe, where a publish from another thread has to
+// stay blocked until connect() returns.
+TEST_F(CoreMqttClientReentrancyTest, SessionRestoreHoldsTheClientMutex)
+{
+    ASSERT_EQ(client->subscribe(kTopic, [](const MqttMessage &) {}), ESP_OK);
+
+    // disconnect() keeps the subscription list, so the next connect() resubscribes.
+    client->disconnect();
+    ASSERT_FALSE(client->isConnected());
+    transport->connect(lopcore::tls::TlsConfig{});
+
+    std::atomic<bool> publishReturned{false};
+    bool publishReturnedDuringRestore = true;
+    std::thread publisher;
+    MockCoreMqtt::subscribeHook() = [&] {
+        publisher = std::thread([&] {
+            client->publishString("dt/test/out", "x");
+            publishReturned = true;
+        });
+        // Long enough for an unblocked publish to finish many times over.
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        publishReturnedDuringRestore = publishReturned.load();
+    };
+
+    ASSERT_EQ(client->connect(), ESP_OK);
+    MockCoreMqtt::subscribeHook() = nullptr;
+    ASSERT_TRUE(publisher.joinable());
+    publisher.join();
+
+    EXPECT_FALSE(publishReturnedDuringRestore); // waited on the mutex while the restore ran
+    EXPECT_TRUE(publishReturned.load());        // and went through once connect() let go
 }
 
 int main(int argc, char **argv)

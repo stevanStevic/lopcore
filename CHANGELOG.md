@@ -35,6 +35,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
     and an outage longer than about 22 s during the CONNECT could not beat the 30 s CONNACK wait.
     `MbedtlsTransport` also sets `TCP_NODELAY` on its socket now, so pieces that do not fit the
     buffer leave at once; another `ITlsTransport` has to disable Nagle itself.
+-   `CoreMqttClient::connect()` holds the client mutex through the session restore (resubscribe or
+    resend of unacknowledged publishes). That path reached coreMQTT unlocked before, so a publish
+    from another task could interleave with it.
 
 ## [1.3.0] - 2026-11-08
 

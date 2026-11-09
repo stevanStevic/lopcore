@@ -117,6 +117,13 @@ CoreMqttClient::CoreMqttClient(const MqttConfig &config,
     // Setup transport interface
     transport_.send = transportSend;
     transport_.recv = transportRecv;
+    // Join the pieces coreMQTT hands over for one packet into one write (see
+    // MqttConfig::sendCoalesceBufferSize). Left unset, coreMQTT sends each piece alone.
+    if (config_.sendCoalesceBufferSize > 0)
+    {
+        sendCoalesceBuffer_.resize(config_.sendCoalesceBufferSize);
+        transport_.writev = transportWritev;
+    }
     transport_.pNetworkContext = &networkContext_;
 
     // Setup coreMQTT context
@@ -256,6 +263,11 @@ esp_err_t CoreMqttClient::connect()
     {
         connectionCallback_(true);
     }
+
+    // Back under mutex_ for the session restore: both branches reach coreMQTT, which
+    // is not reentrant, and transportWritev() stages into one buffer per client. The
+    // process-loop task is not running yet (started below), so this cannot deadlock.
+    lock.lock();
 
     // Resubscribe if needed
     if (!sessionPresent)
@@ -762,6 +774,80 @@ int32_t CoreMqttClient::transportSend(NetworkContext_t *pNetworkContext,
         LOPCORE_LOGE(TAG, "TLS send failed: %s", esp_err_to_name(err));
         return -1;
     }
+}
+
+int32_t CoreMqttClient::transportWritev(NetworkContext_t *pNetworkContext,
+                                        TransportOutVector_t *pIoVec,
+                                        size_t ioVecCount)
+{
+    if (pNetworkContext == nullptr || pIoVec == nullptr || ioVecCount == 0)
+    {
+        LOPCORE_LOGE(TAG, "Invalid transport writev parameters");
+        return -1;
+    }
+
+    CoreMqttClient *client = pNetworkContext->client;
+    if (client == nullptr || client->tlsTransport_ == nullptr || client->sendCoalesceBuffer_.empty())
+    {
+        LOPCORE_LOGE(TAG, "Invalid client or transport");
+        return -1;
+    }
+
+    size_t first = 0;
+    while (first < ioVecCount && pIoVec[first].iov_len == 0)
+    {
+        ++first;
+    }
+    if (first == ioVecCount || pIoVec[first].iov_base == nullptr)
+    {
+        LOPCORE_LOGE(TAG, "Invalid transport writev vector");
+        return -1;
+    }
+
+    // The buffer joins whole pieces. The last piece left, or one the buffer could not
+    // hold, goes to the transport as it is: no copy, and mbedTLS splits it at the TLS
+    // record size on its own. coreMQTT advances its vectors by the count returned and
+    // calls again for what is left, so a packet goes out whole in as many writes as
+    // the join needs, pieces never cut.
+    std::vector<uint8_t> &buffer = client->sendCoalesceBuffer_;
+    const uint8_t *data = static_cast<const uint8_t *>(pIoVec[first].iov_base);
+    size_t length = pIoVec[first].iov_len;
+    if (ioVecCount - first > 1 && length < buffer.size())
+    {
+        size_t joined = 0;
+        for (size_t i = first; i < ioVecCount; ++i)
+        {
+            const size_t n = pIoVec[i].iov_len;
+            if (n > buffer.size() - joined)
+            {
+                break;
+            }
+            if (n > 0)
+            {
+                if (pIoVec[i].iov_base == nullptr)
+                {
+                    LOPCORE_LOGE(TAG, "Invalid transport writev vector");
+                    return -1;
+                }
+                std::memcpy(buffer.data() + joined, pIoVec[i].iov_base, n);
+                joined += n;
+            }
+        }
+        data = buffer.data();
+        length = joined;
+    }
+
+    // A short write (mbedTLS wrote one record of a longer piece) or 0 (retry: coreMQTT
+    // calls again with the same vectors, which rebuilds the same bytes) pass through
+    // as coreMQTT expects.
+    size_t bytesSent = 0;
+    const esp_err_t err = client->tlsTransport_->send(data, length, &bytesSent);
+    if (err != ESP_OK)
+    {
+        LOPCORE_LOGE(TAG, "TLS writev failed: %s", esp_err_to_name(err));
+        return -1;
+    }
+    return static_cast<int32_t>(bytesSent);
 }
 
 int32_t CoreMqttClient::transportRecv(NetworkContext_t *pNetworkContext, void *pBuffer, size_t bytesToRecv)

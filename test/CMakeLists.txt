@@ -160,23 +160,35 @@ add_executable(test_mqtt_traits
 target_link_libraries(test_mqtt_traits GTest::gtest_main)
 gtest_discover_tests(test_mqtt_traits)
 
-add_executable(test_coremqtt_client_simple
-    unit/mqtt/test_coremqtt_client_simple.cpp
+# Sources every CoreMqttClient test links; each target adds its own log sink.
+set(COREMQTT_CLIENT_SRCS
     ${LOPCORE_BASE_DIR}/src/mqtt/coremqtt_client.cpp
     ${LOPCORE_BASE_DIR}/src/mqtt/mqtt_budget.cpp
     ${LOPCORE_BASE_DIR}/src/logging/logger.cpp
+)
+
+add_executable(test_coremqtt_client_simple
+    unit/mqtt/test_coremqtt_client_simple.cpp
+    ${COREMQTT_CLIENT_SRCS}
     ${LOPCORE_BASE_DIR}/src/logging/console_sink.cpp
 )
 target_link_libraries(test_coremqtt_client_simple GTest::gtest_main pthread)
 gtest_discover_tests(test_coremqtt_client_simple)
 
+# writev: one packet's pieces joined into one transport write (issue #15).
+add_executable(test_coremqtt_client_writev
+    unit/mqtt/test_coremqtt_client_writev.cpp
+    ${COREMQTT_CLIENT_SRCS}
+    ${LOPCORE_BASE_DIR}/src/logging/console_sink.cpp
+)
+target_link_libraries(test_coremqtt_client_writev GTest::gtest_main pthread)
+gtest_discover_tests(test_coremqtt_client_writev)
+
 # Regression tests for the processLoop callback re-entrancy deadlock.
 # A regression re-introducing the deadlock hangs; the TIMEOUT catches it.
 add_executable(test_coremqtt_client_reentrancy
     unit/mqtt/test_coremqtt_client_reentrancy.cpp
-    ${LOPCORE_BASE_DIR}/src/mqtt/coremqtt_client.cpp
-    ${LOPCORE_BASE_DIR}/src/mqtt/mqtt_budget.cpp
-    ${LOPCORE_BASE_DIR}/src/logging/logger.cpp
+    ${COREMQTT_CLIENT_SRCS}
     ${LOPCORE_BASE_DIR}/src/logging/queued_sink.cpp
 )
 target_link_libraries(test_coremqtt_client_reentrancy GTest::gtest_main pthread)
@@ -185,9 +197,7 @@ gtest_discover_tests(test_coremqtt_client_reentrancy PROPERTIES TIMEOUT 60)
 # publishConfirmed(): QoS 1 publish that waits for its own PUBACK.
 add_executable(test_coremqtt_client_publish_confirmed
     unit/mqtt/test_coremqtt_client_publish_confirmed.cpp
-    ${LOPCORE_BASE_DIR}/src/mqtt/coremqtt_client.cpp
-    ${LOPCORE_BASE_DIR}/src/mqtt/mqtt_budget.cpp
-    ${LOPCORE_BASE_DIR}/src/logging/logger.cpp
+    ${COREMQTT_CLIENT_SRCS}
 )
 target_link_libraries(test_coremqtt_client_publish_confirmed GTest::gtest_main pthread)
 gtest_discover_tests(test_coremqtt_client_publish_confirmed PROPERTIES TIMEOUT 60)

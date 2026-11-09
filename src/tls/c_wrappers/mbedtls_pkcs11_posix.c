@@ -34,8 +34,11 @@
 
 /* Standard includes. */
 #include <assert.h>
+#include <errno.h>
 #include <inttypes.h>
 #include <string.h>
+
+#include <lwip/sockets.h>
 
 #include <esp_log.h>
 
@@ -876,6 +879,19 @@ MbedtlsPkcs11Status_t Mbedtls_Pkcs11_Connect(NetworkContext_t *pNetworkContext,
         {
             ESP_LOGE(TAG, "Failed to connect to %s with error %" PRIu32 ".", pHostName, mbedtlsError);
             returnStatus = MBEDTLS_PKCS11_CONNECT_FAILURE;
+        }
+        else
+        {
+            /* The MQTT client writes a packet in pieces (CoreMqttClient::transportWritev joins
+             * what fits its buffer). With Nagle on, every segment after the first waits for
+             * the previous one to be acknowledged, so a downlink that goes quiet stalls the
+             * uplink as well. Request-response traffic wants its segments out at once. */
+            int noDelay = 1;
+            if (setsockopt(pMbedtlsPkcs11Context->socketContext.fd, IPPROTO_TCP, TCP_NODELAY, &noDelay,
+                           sizeof(noDelay)) != 0)
+            {
+                ESP_LOGW(TAG, "TCP_NODELAY not set for %s: errno %d.", pHostName, errno);
+            }
         }
     }
 

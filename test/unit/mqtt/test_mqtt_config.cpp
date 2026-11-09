@@ -494,3 +494,25 @@ TEST(MqttConfigTest, BuilderCompleteConfiguration)
     EXPECT_TRUE(config.reconnect.autoReconnect);
     EXPECT_TRUE(config.will.isConfigured());
 }
+
+TEST(MqttConfigTest, SendCoalesceBufferSize_DefaultFitsASmallPublish)
+{
+    MqttConfig config;
+    EXPECT_EQ(config.sendCoalesceBufferSize, 2048u);
+}
+
+TEST(MqttConfigTest, SendCoalesceBufferSize_BeyondTheTlsFragmentIsInvalid)
+{
+    MqttConfig config = MqttConfig::builder()
+                            .broker("test-broker.example.com")
+                            .port(8883)
+                            .clientId("device-001")
+                            .sendCoalesceBufferSize(MqttConfig::kSendCoalesceBufferMax + 1)
+                            .build();
+    EXPECT_EQ(config.validate(), ESP_ERR_INVALID_ARG);
+
+    config.sendCoalesceBufferSize = MqttConfig::kSendCoalesceBufferMax;
+    EXPECT_EQ(config.validate(), ESP_OK);
+    config.sendCoalesceBufferSize = 0;
+    EXPECT_EQ(config.validate(), ESP_OK);
+}

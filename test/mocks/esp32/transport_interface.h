@@ -31,6 +31,18 @@ typedef int32_t (*TransportRecv_t)(struct NetworkContext *pNetworkContext, void 
 // NetworkContext_t is just an alias - actual definition comes from application
 typedef struct NetworkContext NetworkContext_t;
 
+/** One piece of an outgoing packet (coreMQTT's TransportOutVector_t). */
+typedef struct TransportOutVector
+{
+    const void *iov_base;
+    size_t iov_len;
+} TransportOutVector_t;
+
+/** Optional vectored send: bytes written, or negative on error (0 = retry). */
+typedef int32_t (*TransportWritev_t)(struct NetworkContext *pNetworkContext,
+                                     TransportOutVector_t *pIoVec,
+                                     size_t ioVecCount);
+
 /**
  * @brief Transport interface
  */
@@ -38,6 +50,7 @@ typedef struct TransportInterface
 {
     TransportRecv_t recv;
     TransportSend_t send;
+    TransportWritev_t writev;
     NetworkContext_t *pNetworkContext;
 } TransportInterface_t;
 

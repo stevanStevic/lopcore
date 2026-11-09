@@ -15,12 +15,41 @@ extern "C++" {
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <mutex>
 #include <string>
 }
 #endif
 
 #include "transport_interface.h"
+
+#ifdef __cplusplus
+extern "C++" {
+namespace MockCoreMqtt
+{
+/**
+ * The TransportInterface_t the last MQTT_Init() received. Lets a test drive the
+ * client's transport callbacks (send, recv, writev) the way coreMQTT would.
+ */
+inline TransportInterface_t &lastInitTransport()
+{
+    static TransportInterface_t iface{};
+    return iface;
+}
+
+/**
+ * Runs inside every mock MQTT_Subscribe(), on the calling thread, before it
+ * returns. Lets a test look at the client while a session restore is in
+ * progress. Empty by default; tests reset it.
+ */
+inline std::function<void()> &subscribeHook()
+{
+    static std::function<void()> hook;
+    return hook;
+}
+} // namespace MockCoreMqtt
+}
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -201,6 +230,7 @@ inline MQTTStatus_t MQTT_Init(MQTTContext_t *pContext,
     if (pContext != nullptr && pTransportInterface != nullptr && pNetworkBuffer != nullptr)
     {
         pContext->transportInterface = *pTransportInterface;
+        MockCoreMqtt::lastInitTransport() = *pTransportInterface;
         pContext->networkBuffer = *pNetworkBuffer;
         pContext->getTime = getTimeFunction;
         pContext->appCallback = userCallback;
@@ -266,6 +296,10 @@ inline MQTTStatus_t MQTT_Subscribe(MQTTContext_t *pContext,
     (void) pSubscriptionList;
     (void) subscriptionCount;
     (void) packetId;
+    if (MockCoreMqtt::subscribeHook())
+    {
+        MockCoreMqtt::subscribeHook()();
+    }
     return MQTTSuccess;
 }
 
